@@ -2,11 +2,13 @@ mod collision;
 mod hull;
 mod maze;
 mod motion;
+mod pickups;
 mod projectile;
 mod round;
 
 pub use maze::{Maze, Pose, Wall};
 pub use motion::{Action, Params, drive};
+pub use pickups::LASER_PICKUP_SIZE;
 pub use round::{ProjectileView, Round, RoundOutcome, RoundView, TankView};
 
 pub const TICKS_PER_SECOND: u32 = 60;

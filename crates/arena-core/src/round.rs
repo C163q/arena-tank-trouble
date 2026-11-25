@@ -1,3 +1,4 @@
+use crate::pickups::Pickups;
 use crate::projectile::{Impact, Projectile};
 use crate::{Action, MUZZLE_DISTANCE, Maze, Params, Pose, TICKS_PER_SECOND, Vec2, drive};
 
@@ -19,6 +20,7 @@ pub enum RoundOutcome {
 pub struct TankView {
     pub pose: Pose,
     pub ammo: u8,
+    pub laser_loaded: bool,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq)]
@@ -35,6 +37,7 @@ pub struct RoundView<'a> {
     pub params: &'a Params,
     pub tanks: [TankView; 2],
     pub projectiles: Vec<ProjectileView>,
+    pub pickups: &'a [Vec2],
     pub outcome: RoundOutcome,
 }
 
@@ -45,6 +48,7 @@ pub struct Round {
     params: Params,
     tanks: [Tank; 2],
     projectiles: Vec<Projectile>,
+    pickups: Pickups,
     outcome: RoundOutcome,
     reload_ticks: u64,
 }
@@ -53,6 +57,7 @@ struct Tank {
     pose: Pose,
     ammo: u8,
     refill_at: Option<u64>,
+    laser_loaded: bool,
 }
 
 impl Tank {
@@ -93,8 +98,10 @@ impl Round {
                 pose,
                 ammo: MAGAZINE_CAPACITY,
                 refill_at: None,
+                laser_loaded: false,
             }),
             projectiles: Vec::new(),
+            pickups: Pickups::new(seed),
             outcome: RoundOutcome::Running,
             reload_ticks,
         }
@@ -112,6 +119,9 @@ impl Round {
             tank.pose = drive(&self.maze, tank.pose, other, action, &self.params);
         }
         let poses = [self.tanks[0].pose, self.tanks[1].pose];
+        for (tank, collected) in self.tanks.iter_mut().zip(self.pickups.collect(poses)) {
+            tank.laser_loaded |= collected;
+        }
         let mut hits = [false; 2];
         let mut advance = |bullet: &mut Projectile, distance| match bullet.advance(
             &self.maze,
@@ -145,6 +155,9 @@ impl Round {
             [true, false] => RoundOutcome::SelfHit,
             [true, true] => RoundOutcome::Draw,
         };
+        if self.outcome == RoundOutcome::Running {
+            self.pickups.spawn_due(self.tick, &self.maze, poses);
+        }
     }
 
     pub fn view(&self) -> RoundView<'_> {
@@ -158,6 +171,7 @@ impl Round {
                 TankView {
                     pose: tank.pose,
                     ammo: tank.ammo,
+                    laser_loaded: tank.laser_loaded,
                 }
             }),
             projectiles: self
@@ -167,6 +181,7 @@ impl Round {
                     position: bullet.position,
                 })
                 .collect(),
+            pickups: self.pickups.positions(),
             outcome: self.outcome,
         }
     }
