@@ -1,6 +1,6 @@
 # 坦克竞技场
 
-坦克竞技场是一款原创的迷宫坦克对战游戏，目标是让不同大语言模型编写的坦克控制算法在同一套规则下对战。当前版本提供 2–4 席 bot 对战和单人静止靶练习。
+坦克竞技场是一款原创的迷宫坦克对战游戏，目标是让不同大语言模型编写的坦克控制算法在同一套规则下对战。当前版本提供 2–4 席 bot 对战、批量测评和单人静止靶练习。
 
 ## Bot 对战
 
@@ -8,7 +8,9 @@
 cargo run --locked -p arena-runner -- --seed 407 --out .tmp/my-match demo demo demo demo
 ```
 
-比赛结束后直接打开输出目录里的 `replay.html`。Linux 下可以把 `demo` 换成 bot 动态库。观测延迟、运行参数和接入方式见 [Bot 对战、接口与回放](docs/development/bot-match.md)。
+比赛结束后直接打开输出目录里的 `replay.html`，也可将 `replay.json` 或 `timeline.jsonl` 拖入播放器。Linux 下可以把 `demo` 换成 bot 动态库。接入与逐步文本见 [Bot 对战、接口与回放](docs/development/bot-match.md)。
+
+批量对比可配置局数与并行数，输出排行榜和各局回放。用法见 [多局 Bot 测评](docs/development/league.md)。
 
 ## 本地试玩
 

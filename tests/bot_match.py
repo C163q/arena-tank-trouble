@@ -38,6 +38,10 @@ uint32_t arena_bot_decide(const uint8_t *observation, size_t len) {
     if (KIND == 3) {
         abort();
     }
+    if (KIND == 6) {
+        static unsigned calls = 0;
+        return calls++ == 0 ? ARENA_FIRE : 0;
+    }
     if (KIND == 5) {
         printf("%ld\n", (long)getpid());
         fflush(stdout);
