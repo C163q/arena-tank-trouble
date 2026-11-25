@@ -1,0 +1,42 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>坦克竞技场 · 对局回放</title>
+<style>
+:root { color-scheme: light; font-family: system-ui, sans-serif; background: #e6e9e3; color: #263433; }
+body { margin: 0; }
+main { max-width: 64rem; margin: auto; padding: 1.25rem; }
+h1 { margin: 0 0 .8rem; font-size: 1.5rem; }
+canvas { display: block; width: 100%; aspect-ratio: 3 / 2; border-radius: .5rem; background: #f1f2ee; }
+.controls { display: flex; align-items: center; flex-wrap: wrap; gap: .8rem; margin-top: .8rem; }
+input[type="range"] { min-width: 7rem; flex: 1; }
+button, select { font: inherit; padding: .2rem .45rem; color: inherit; }
+output { font-variant-numeric: tabular-nums; }
+table { width: 100%; text-align: left; border-collapse: collapse; }
+caption { font-weight: bold; text-align: left; margin-bottom: .4rem; }
+td, th { padding: .32rem .2rem; border-bottom: 1px solid #bec7be; overflow-wrap: anywhere; }
+.color { display: inline-block; height: .75rem; width: .75rem; margin-right: .35rem; vertical-align: baseline; border-radius: 50%; }
+</style>
+</head>
+<body>
+<main>
+<h1>坦克对局回放</h1>
+<canvas aria-label="对局画面"></canvas>
+<div class="controls">
+  <button id="play" type="button">播放</button>
+  <input id="seek" type="range" min="0" value="0" aria-label="回放进度">
+  <output id="time" for="seek"></output>
+  <label>倍速 <select id="speed"><option value=".5">0.5×</option><option selected value="1">1×</option><option value="2">2×</option><option value="4">4×</option></select></label>
+</div>
+<p id="result"></p>
+<table>
+  <caption>最终积分</caption>
+  <thead><tr><th scope="col">席位</th><th scope="col">击杀分</th><th scope="col">存活分</th><th scope="col">总分</th></tr></thead>
+  <tbody id="scoreboard"></tbody>
+</table>
+</main>
+<!-- REPLAY_SCRIPT -->
+</body>
+</html>

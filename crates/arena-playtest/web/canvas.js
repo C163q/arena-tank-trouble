@@ -3,9 +3,14 @@ const palette = {
   wall: "#3c454a",
   laser: "#087e87",
   shotgun: "#b76b18",
-  player: { main: "#b65430", light: "#e8a37d", dark: "#68341f" },
-  target: { main: "#51768b", light: "#acc2cd", dark: "#314c5b" },
 };
+
+const tankColors = [
+  { main: "#b65430", light: "#e8a37d", dark: "#68341f" },
+  { main: "#51768b", light: "#acc2cd", dark: "#314c5b" },
+  { main: "#6e7841", light: "#c5cd88", dark: "#3b4729" },
+  { main: "#896192", light: "#d4a8db", dark: "#513757" },
+];
 
 let latestCanvas;
 let latestRound;
@@ -111,8 +116,9 @@ export function render(canvas, state) {
   }
   ctx.stroke();
 
-  if (state.tanks[0].alive) tank(ctx, state.tanks[0], palette.player, state.geometry);
-  if (state.tanks[1].alive) tank(ctx, state.tanks[1], palette.target, state.geometry);
+  state.tanks.forEach((seat, index) => {
+    if (seat.alive) tank(ctx, seat, tankColors[index], state.geometry);
+  });
 
   for (const { kind, position: { x, y } } of state.projectiles) {
     const laser = kind === "laser";
