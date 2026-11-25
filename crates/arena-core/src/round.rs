@@ -82,6 +82,9 @@ impl Round {
     }
 
     fn from_maze(seed: u64, params: Params, maze: Maze, spawns: [Pose; 2]) -> Self {
+        let exact_ticks = params.reload_secs * f64::from(TICKS_PER_SECOND);
+        // Keep a whole tick whole when a decimal setting rounds slightly up.
+        let reload_ticks = (exact_ticks - exact_ticks * f64::EPSILON).ceil() as u64;
         Self {
             seed,
             tick: 0,
@@ -94,7 +97,7 @@ impl Round {
             }),
             projectiles: Vec::new(),
             outcome: RoundOutcome::Running,
-            reload_ticks: (params.reload_secs * f64::from(TICKS_PER_SECOND)).ceil() as u64,
+            reload_ticks,
         }
     }
 
@@ -249,6 +252,26 @@ mod tests {
     }
 
     #[test]
+    fn reload_rounds_fractional_ticks_and_keeps_exact_boundaries() {
+        for (seconds, ticks) in [(4.15, 249), (0.21, 13)] {
+            let mut round = fixture(
+                vec![],
+                pose(1.0, 1.0, 0.0),
+                pose(1.0, 7.0, 0.0),
+                Params {
+                    reload_secs: seconds,
+                    ..Params::default()
+                },
+            );
+            fire(&mut round);
+            idle(&mut round, ticks - 1);
+            assert_eq!(round.view().tanks[0].ammo, 4, "before {seconds}s");
+            idle(&mut round, 1);
+            assert_eq!(round.view().tanks[0].ammo, 5, "at {seconds}s");
+        }
+    }
+
+    #[test]
     fn wall_at_muzzle_counts_as_first_contact() {
         for (limit, expected) in [(5, RoundOutcome::SelfHit), (1, RoundOutcome::Running)] {
             let mut round = fixture(
@@ -274,7 +297,10 @@ mod tests {
             vec![wall((2.0, 1.0), (2.0, 2.0)), wall((1.0, 2.0), (2.0, 2.0))],
             pose(1.5, 1.5, FRAC_PI_4),
             pose(4.0, 3.0, 0.0),
-            Params::default(),
+            Params {
+                wall_contacts: 2,
+                ..Params::default()
+            },
         );
         fire(&mut round);
         idle(&mut round, 1);

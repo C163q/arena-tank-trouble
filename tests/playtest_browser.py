@@ -78,6 +78,13 @@ def open_playtest(page, url):
     expect(page.locator("canvas")).to_be_visible(timeout=2500)
     expect(page.locator("#connection-status")).to_have_text("已连接")
     wire.wait_for(lambda s: s["seed"] == SEED, "seeded start")
+    page.wait_for_function(
+        """() => {
+          const canvas = document.querySelector("canvas");
+          const pixel = canvas.getContext("2d").getImageData(canvas.width >> 1, canvas.height >> 1, 1, 1);
+          return pixel.data[3] === 255;
+        }"""
+    )
     return wire
 
 
@@ -102,14 +109,26 @@ def test_keyboard_hit_and_restart(page, url):
     page.keyboard.up("s")
 
     page.locator("#reload_secs").fill("0.25")
+    page.locator("canvas").focus()
+    tick_before_key = wire.states[-1]["tick"]
     page.keyboard.down("w")
+    wire.wait_for(lambda s: s["tick"] >= tick_before_key + 3, "held input before restart")
+    assert wire.commands[-1]["type"] == "input" and wire.commands[-1]["forward"]
     page.get_by_role("button", name="同图重开").click()
     restarted = wire.wait_for(lambda s: s["round"] == 1 and s["tick"] >= 4, "same-map restart")
     assert restarted["seed"] == SEED
     assert restarted["walls"] == initial["walls"]
     assert restarted["tanks"] == initial["tanks"]
     assert restarted["params"]["reload_secs"] == 0.25
+    page.keyboard.down("w")  # A repeat for the key held before restart.
+    settled = wire.wait_for(lambda s: s["tick"] >= restarted["tick"] + 4, "steps after repeat")
+    assert settled["tanks"] == initial["tanks"]
     page.keyboard.up("w")
+    page.keyboard.down("w")
+    wire.wait_for(lambda s: player_pose(s)["position"] != spawn["position"], "movement after re-press")
+    page.keyboard.up("w")
+    page.get_by_role("button", name="同图重开").click()
+    wire.wait_for(lambda s: s["round"] == 2, "return to shooting position")
 
     page.keyboard.down("Space")
     wire.wait_for(lambda s: ammo(s) == 4, "shot consuming one round")
@@ -125,7 +144,7 @@ def test_keyboard_hit_and_restart(page, url):
     page.keyboard.press("d")
     assert wire.states[-1]["tick"] == complete["tick"]
     page.get_by_role("button", name="换图重开").click()
-    next_map = wire.wait_for(lambda s: s["round"] == 2, "new-map restart")
+    next_map = wire.wait_for(lambda s: s["round"] == 3, "new-map restart")
     assert next_map["seed"] != SEED
     assert next_map["target_hits"] == next_map["self_hits"] == 0
     assert not page.evaluate("document.documentElement.scrollWidth > innerWidth")
