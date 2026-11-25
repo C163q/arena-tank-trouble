@@ -87,3 +87,23 @@ fn kills_and_final_survival_are_scored_separately() {
         }
     );
 }
+
+#[test]
+fn default_points_reward_last_survivor_twice_as_much_as_a_kill() {
+    let config = MatchConfig::default();
+    let mut scores = [Score::default(); 2];
+    score_step(
+        &mut scores,
+        &config,
+        &[Elimination { tank: 1, owner: 0 }],
+        RoundOutcome::Winner(0),
+    );
+    assert_eq!(
+        scores[0],
+        Score {
+            kill_points: 1,
+            survival_points: 2
+        }
+    );
+    assert_eq!(scores[1], Score::default());
+}

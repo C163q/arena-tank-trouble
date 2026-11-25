@@ -72,11 +72,15 @@ def fixture(directory, name, kind=0, wrong_abi=0):
     return library
 
 
-def run_match(binary, out, *bots, max_ticks=3600, seed=407, kill=1, survival=1, check=True):
+def run_match(binary, out, *bots, max_ticks=3600, seed=407, kill=None, survival=None, check=True):
     command = [
         str(binary), "--out", str(out), "--seed", str(seed), "--max-ticks", str(max_ticks),
-        "--kill-points", str(kill), "--survival-points", str(survival), *map(str, bots),
     ]
+    if kill is not None:
+        command.extend(("--kill-points", str(kill)))
+    if survival is not None:
+        command.extend(("--survival-points", str(survival)))
+    command.extend(map(str, bots))
     outcome = subprocess.run(command, text=True, capture_output=True, timeout=20)
     if check:
         assert outcome.returncode == 0, outcome.stderr
@@ -157,6 +161,36 @@ def verify_failed_export(binary, path):
     assert not list(path.glob(".arena-replay-*"))
 
 
+def verify_timeline(path, data):
+    with path.open(encoding="utf-8") as text:
+        records = [json.loads(line) for line in text]
+    header, *frames, result = records
+    assert header["type"] == "arena_timeline"
+    assert header["map"] == data["map"]
+    assert header["seats"] == data["seats"]
+    assert result["type"] == "result"
+    assert result["result"] == data["result"] and result["scores"] == data["scores"]
+    assert len(frames) == len(data["frames"]) == result["tick"] + 1
+    for index, (compact, exact) in enumerate(zip(frames, data["frames"])):
+        assert compact["tick"] == exact["tick"] == index
+        assert compact["victory_at"] == exact["victory_at"]
+        assert compact["eliminations"] == [[e["tank"], e["owner"]] for e in exact["eliminations"]]
+        for tank, source in zip(compact["tanks"], exact["tanks"]):
+            pose = source["pose"]
+            assert tank == [pose["position"]["x"], pose["position"]["y"], pose["angle"],
+                            source["alive"], source["ammo"], source["refill_at"], source["next_shot"]]
+        for shot, source in zip(compact["projectiles"], exact["projectiles"]):
+            assert shot == [source["owner"], source["kind"], source["position"]["x"],
+                            source["position"]["y"], source["velocity"]["x"],
+                            source["velocity"]["y"], source["wall_contacts"]]
+        assert compact["decisions"] == [
+            ["".join(key for name, key in zip(
+                ("forward", "reverse", "turn_left", "turn_right", "fire"), "WSADF"
+            ) if decision["action"][name]) or "-", decision["status"], decision.get("diagnostic")]
+            for decision in exact["decisions"]
+        ]
+
+
 def verify_browser(replay_path, screenshot):
     from playwright.sync_api import expect, sync_playwright
 
@@ -209,6 +243,8 @@ def main():
     data = run_match(binary, args.artifacts, *["demo"] * 4, seed=DEMO_SEED)
     assert data["result"]["reason"] == "winner"
     assert len(data["seats"]) == 4 and data["observation_delay_ticks"] == 12
+    assert data["scores"][data["result"]["seat"]]["survival_points"] == 2
+    verify_timeline(args.artifacts / "timeline.jsonl", data)
     if args.browser:
         verify_browser(args.artifacts / "replay.html", args.artifacts / "replay-preview.png")
     print("Bot match: real C ABI, timed decisions, kill and survival scoring, four-seat replay passed")

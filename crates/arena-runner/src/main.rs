@@ -3,6 +3,7 @@ mod matchplay;
 #[cfg(target_os = "linux")]
 mod native;
 mod replay;
+mod timeline;
 
 use std::error::Error;
 use std::ffi::OsString;

@@ -20,9 +20,9 @@ pub fn export(out: &Path, replay: &Replay) -> Result<PathBuf, Box<dyn Error>> {
     let nonce = SystemTime::now().duration_since(UNIX_EPOCH)?.as_nanos();
     let stage = parent.join(format!(".arena-replay-{}-{nonce}", std::process::id()));
     fs::create_dir(&stage)?;
-    let result = write_files(&stage, &encoded).and_then(|()| publish(&stage, out));
+    let result = write_files(&stage, &encoded, replay).and_then(|()| publish(&stage, out));
     if result.is_err() {
-        for file in ["replay.json", "replay.html"] {
+        for file in ["replay.json", "replay.html", "timeline.jsonl"] {
             let _ = fs::remove_file(stage.join(file));
         }
         let _ = fs::remove_dir(&stage);
@@ -31,8 +31,10 @@ pub fn export(out: &Path, replay: &Replay) -> Result<PathBuf, Box<dyn Error>> {
     Ok(out.join("replay.html"))
 }
 
-fn write_files(directory: &Path, encoded: &[u8]) -> io::Result<()> {
+fn write_files(directory: &Path, encoded: &[u8], replay: &Replay) -> io::Result<()> {
     fs::write(directory.join("replay.json"), encoded)?;
+    let timeline = File::create(directory.join("timeline.jsonl"))?;
+    crate::timeline::write(BufWriter::new(timeline), replay)?;
     let path = directory.join("replay.html");
     let (head, tail) = PAGE
         .split_once("<!-- REPLAY_SCRIPT -->")

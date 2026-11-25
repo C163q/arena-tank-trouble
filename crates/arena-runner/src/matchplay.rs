@@ -25,7 +25,7 @@ impl Default for MatchConfig {
             seed: 407,
             max_ticks: 60 * u64::from(TICKS_PER_SECOND),
             kill_points: 1,
-            survival_points: 1,
+            survival_points: 2,
             params: Params::default(),
         }
     }
