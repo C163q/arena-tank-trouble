@@ -36,6 +36,7 @@ def build(offline):
         raise ValueError("打包需要 Linux x86_64 GNU/glibc")
     target_dir = ROOT / "target/contest-build"
     env = os.environ.copy()
+    env["LC_ALL"] = "C"
     env["CARGO_TARGET_DIR"] = str(target_dir)
     env["CARGO_ENCODED_RUSTFLAGS"] = "\x1f".join(("-C", "opt-level=3", "-C", "debuginfo=0", "-C", "strip=symbols"))
     command = [
@@ -49,11 +50,12 @@ def build(offline):
     versions = set()
     for name in BUILD_FILES:
         artifact = artifacts / name
-        sections = subprocess.check_output(["readelf", "--wide", "--sections", artifact], text=True)
+        sections = subprocess.check_output(["readelf", "--wide", "--sections", artifact], text=True, env=env)
         if re.search(r"\.(?:z?debug_\w*|symtab|gnu_debuglink)\s", sections):
             raise ValueError(f"构建产物仍带有调试节或普通符号表：{name}")
-        info = subprocess.check_output(["readelf", "--version-info", artifact], text=True)
-        versions.update(re.findall(r"\bGLIBC_(\d+(?:\.\d+)+)\b", info))
+        info = subprocess.check_output(["readelf", "--version-info", artifact], text=True, env=env)
+        # Weak version references have fallbacks and do not set the loader's minimum.
+        versions.update(re.findall(r"\bName: GLIBC_(\d+(?:\.\d+)+)\s+Flags: none\b", info))
     return artifacts, max(versions, key=lambda value: tuple(map(int, value.split("."))))
 
 

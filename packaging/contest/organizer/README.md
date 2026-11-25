@@ -37,10 +37,12 @@ LLM 从参赛目录执行 `bin/fff-timer-query` 查看总用时。让参赛环�
 
 收齐提交后，使用同一题包的裁判、统一的地图种子和计分规则。让每一组同图比赛完整轮换出生位。正式评测串行运行，以减少并行争抢对决策时限的影响。
 
-在项目仓库根目录调用测评器。以下命令适用于两个提交，将裁判路径和库路径改为实际路径。
+在专用的隔离环境中验收并评测外部动态库。Bot 的独立进程用于处理超时和崩溃，它拥有评测用户的权限。评测环境只需开放题包、本次使用的动态库和输出目录，将项目源码、计时状态和其他文件留在场外。
+
+在评测环境解压同一份题包，进入 `arena-contest/` 运行下面的命令。示例适用于两个提交，将库路径换成实际路径。
 
 ```sh
-python3 scripts/league.py --runner /path/to/arena-contest/bin/arena-runner \
+python3 scripts/league.py --runner bin/arena-runner \
   --players 2 --matches 12 --jobs 1 --seed 407 --out runs/formal \
   /path/to/team-a/libteam.so /path/to/team-b/libteam.so
 ```
