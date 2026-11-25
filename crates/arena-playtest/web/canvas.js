@@ -2,6 +2,7 @@ const palette = {
   ground: "#f1f2ee",
   wall: "#3c454a",
   laser: "#087e87",
+  shotgun: "#b76b18",
   player: { main: "#b65430", light: "#e8a37d", dark: "#68341f" },
   target: { main: "#51768b", light: "#acc2cd", dark: "#314c5b" },
 };
@@ -10,7 +11,7 @@ let latestCanvas;
 let latestRound;
 let latestTick;
 
-function tank(ctx, { pose, laser_loaded }, colors, geometry) {
+function tank(ctx, { pose, next_shot }, colors, geometry) {
   const { tank_length: length, tank_width: width, muzzle_distance: muzzle } = geometry;
   const trackWidth = width * 0.25;
   ctx.save();
@@ -19,12 +20,18 @@ function tank(ctx, { pose, laser_loaded }, colors, geometry) {
 
   ctx.fillStyle = colors.dark;
   ctx.fillRect(-length / 2, -width / 2, length, width);
-  if (laser_loaded) {
+  if (next_shot === "laser") {
     const gap = width * 0.15;
     const rail = width * 0.085;
     ctx.fillStyle = palette.laser;
     ctx.fillRect(0, gap, muzzle, rail);
     ctx.fillRect(0, -gap - rail, muzzle, rail);
+  } else if (next_shot === "shotgun") {
+    const base = length * 0.30;
+    ctx.fillStyle = palette.shotgun;
+    ctx.fillRect(base, -width * 0.24, muzzle - base, width * 0.48);
+    ctx.fillStyle = colors.dark;
+    ctx.fillRect(muzzle - 0.024, -width * 0.17, 0.024, width * 0.34);
   } else {
     ctx.beginPath();
     ctx.roundRect(0, -width * 0.12, muzzle, width * 0.24, width * 0.05);
@@ -78,12 +85,20 @@ export function render(canvas, state) {
   }
   ctx.fill();
 
-  const pickupSize = state.geometry.laser_pickup_size;
-  for (const { x, y } of state.pickups) {
-    ctx.fillStyle = palette.laser;
+  const pickupSize = state.geometry.pickup_size;
+  for (const { x, y, kind } of state.pickups) {
+    ctx.fillStyle = palette[kind];
     ctx.fillRect(x - pickupSize / 2, y - pickupSize / 2, pickupSize, pickupSize);
     ctx.fillStyle = palette.ground;
-    ctx.fillRect(x - pickupSize / 4, y - pickupSize / 16, pickupSize / 2, pickupSize / 8);
+    if (kind === "shotgun") {
+      for (const offset of [-1, 0, 1]) {
+        ctx.beginPath();
+        ctx.arc(x + offset * pickupSize * 0.22, y, pickupSize * 0.065, 0, Math.PI * 2);
+        ctx.fill();
+      }
+    } else {
+      ctx.fillRect(x - pickupSize / 4, y - pickupSize / 16, pickupSize / 2, pickupSize / 8);
+    }
   }
 
   ctx.strokeStyle = palette.laser;

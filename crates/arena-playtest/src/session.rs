@@ -1,5 +1,5 @@
 use arena_core::{
-    Action, LASER_PICKUP_SIZE, LASER_RADIUS, MUZZLE_DISTANCE, PROJECTILE_RADIUS, Params, Round,
+    Action, LASER_RADIUS, MUZZLE_DISTANCE, PICKUP_SIZE, PROJECTILE_RADIUS, Params, Round,
     RoundOutcome, RoundView, TANK_LENGTH, TANK_WIDTH, WALL_THICKNESS,
 };
 use rand::{RngCore, SeedableRng, rngs::StdRng};
@@ -156,7 +156,8 @@ impl Session {
                 "muzzle_distance": MUZZLE_DISTANCE,
                 "projectile_radius": PROJECTILE_RADIUS,
                 "wall_thickness": WALL_THICKNESS,
-                "laser_pickup_size": LASER_PICKUP_SIZE,
+                "laser_pickup_size": PICKUP_SIZE,
+                "pickup_size": PICKUP_SIZE,
                 "laser_radius": LASER_RADIUS,
             },
             "width": view.maze.width,
@@ -261,19 +262,28 @@ mod tests {
 
     #[test]
     fn restart_validates_and_resets_laser_state() {
-        let mut game = Session::new(1647);
+        let mut game = Session::new(26532);
         let legacy = game.receive(&restart(0, "same", 3.0)).unwrap();
         assert_eq!(legacy["params"]["laser_trail_secs"], 0.20);
+        assert_eq!(legacy["geometry"]["pickup_size"], 0.32);
         for _ in 0..900 {
             game.game.step([Action::default(); 2]);
         }
-        assert_eq!(game.state()["pickups"].as_array().unwrap().len(), 2);
+        let spawned = game.state();
+        let pickups = spawned["pickups"].as_array().unwrap();
+        assert_eq!(pickups.len(), 2);
+        assert!(
+            pickups
+                .iter()
+                .all(|item| item["kind"] == "laser" && item["x"].as_f64().is_some())
+        );
         game.receive(&input(1, true));
-        for _ in 0..72 {
+        for _ in 0..45 {
             game.tick();
         }
         game.receive(&input(1, false));
         assert_eq!(game.state()["tanks"][0]["laser_loaded"], true);
+        assert_eq!(game.state()["tanks"][0]["next_shot"], "laser");
         game.receive(&fire(1));
         let before = game.tick();
         assert!(!before["laser_trails"].as_array().unwrap().is_empty());
@@ -292,6 +302,9 @@ mod tests {
         assert_eq!(after["laser_trails"], json!([]));
         assert_eq!(after["tanks"][0]["laser_loaded"], false);
         assert_eq!(after["tanks"][1]["laser_loaded"], false);
+        for tank in after["tanks"].as_array().unwrap() {
+            assert_eq!(tank.get("next_shot"), Some(&Value::Null));
+        }
     }
 
     #[test]

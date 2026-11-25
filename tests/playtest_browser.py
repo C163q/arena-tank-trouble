@@ -15,7 +15,8 @@ from playwright.sync_api import expect, sync_playwright
 
 ROOT = Path(__file__).resolve().parents[1]
 SEED = "407"  # The default facing has a clear shot from spawn to the target.
-LASER_SEED = "1647"  # Both first-wave pickups are ahead in a clear corridor.
+LASER_SEED = "26532"  # Two lasers ahead in a clear corridor.
+SHOTGUN_SEED = "78040"  # Laser then shotgun ahead in the same corridor.
 
 
 @contextmanager
@@ -202,9 +203,9 @@ def test_blur_releases_input(page, url):
     page.keyboard.up("w")
 
 
-def wait_for_laser_pixel(page, x, y, snapshot=None):
+def wait_for_weapon_pixel(page, x, y, kind="laser", snapshot=None):
     page.wait_for_function(
-        """async ({x, y, snapshot}) => {
+        """async ({x, y, kind, snapshot}) => {
           const live = document.querySelector("canvas");
           let canvas = live;
           if (snapshot) {
@@ -221,9 +222,11 @@ def wait_for_laser_pixel(page, x, y, snapshot=None):
           const point = new DOMPoint(x, y).matrixTransform(ctx.getTransform());
           const [red, green, blue] = ctx.getImageData(Math.floor(point.x), Math.floor(point.y), 1, 1).data;
           if (canvas !== live) canvas.remove();
-          return green > red + 20 && blue > red + 20;
+          return kind === "shotgun"
+            ? red > 145 && red > green + 30 && green > blue + 30
+            : green > red + 20 && blue > red + 20;
         }""",
-        arg={"x": x, "y": y, "snapshot": snapshot},
+        arg={"x": x, "y": y, "kind": kind, "snapshot": snapshot},
         timeout=500,
     )
 
@@ -232,11 +235,14 @@ def test_laser_pickup_and_fire(page, url, artifacts):
     wire = open_playtest(page, url, LASER_SEED)
     lifetime = page.locator("#laser_trail_secs")
     expect(lifetime).to_have_value("0.2", timeout=2000)
+    geometry = wire.states[-1]["geometry"]
+    assert geometry["pickup_size"] == geometry["laser_pickup_size"] == 0.32
     first = wire.wait_for(lambda s: len(s["pickups"]) == 2, "first laser batch", timeout=25)
     assert min(s["tick"] for s in wire.states if s["pickups"]) == 900
-    assert first["geometry"]["laser_pickup_size"] == 0.32
     assert first["geometry"]["laser_radius"] == 0.030
-    wait_for_laser_pixel(page, 4.62, 0.62)
+    assert all(item["kind"] == "laser" for item in first["pickups"])
+    marker = first["pickups"][0]
+    wait_for_weapon_pixel(page, marker["x"] + 0.12, marker["y"] + 0.12)
     page.screenshot(path=artifacts / "laser-pickups.png")
     assert not first["tanks"][0]["laser_loaded"]
 
@@ -249,7 +255,7 @@ def test_laser_pickup_and_fire(page, url, artifacts):
     neutral = wire.states[-1]["tick"]
     loaded = wire.wait_for(lambda s: s["tick"] >= neutral + 3, "neutral after pickups")
     position = player_pose(loaded)["position"]
-    wait_for_laser_pixel(page, position["x"] + 0.27, position["y"] + 0.066)
+    wait_for_weapon_pixel(page, position["x"] + 0.27, position["y"] + 0.066)
     page.screenshot(path=artifacts / "laser-loaded.png")
 
     page.keyboard.press("Space")
@@ -270,7 +276,7 @@ def test_laser_pickup_and_fire(page, url, artifacts):
     start = laser["laser_trails"][0]["start"]
     end = laser["laser_trails"][0]["end"]
     # The live first segment may have expired by the time the shell is visible.
-    wait_for_laser_pixel(page, (start["x"] + end["x"]) / 2, (start["y"] + end["y"]) / 2, snapshot=laser)
+    wait_for_weapon_pixel(page, (start["x"] + end["x"]) / 2, (start["y"] + end["y"]) / 2, snapshot=laser)
     page.screenshot(path=artifacts / "laser-trail.png")
 
     lifetime.fill("0.50")
@@ -280,6 +286,40 @@ def test_laser_pickup_and_fire(page, url, artifacts):
     assert reset["seed"] == LASER_SEED and reset["walls"] == first["walls"]
     assert not reset["pickups"] and not reset["laser_trails"] and not reset["projectiles"]
     assert not reset["tanks"][0]["laser_loaded"]
+    assert reset["tanks"][0]["next_shot"] is None
+
+
+def test_shotgun_replaces_laser_in_browser(page, wire, artifacts):
+    first = wire.wait_for(lambda s: len(s["pickups"]) == 2, "first mixed batch", timeout=25)
+    items = sorted(first["pickups"], key=lambda item: -item["x"])
+    assert [item["kind"] for item in items] == ["laser", "shotgun"]
+    for item in items:
+        wait_for_weapon_pixel(page, item["x"] + 0.12, item["y"] + 0.12, kind=item["kind"])
+    page.screenshot(path=artifacts / "mixed-pickups.png")
+
+    page.keyboard.down("w")
+    try:
+        wire.wait_for(lambda s: s["tanks"][0]["next_shot"] == "laser", "laser loaded first")
+        wire.wait_for(lambda s: s["tanks"][0]["next_shot"] == "shotgun", "shotgun replaces the laser")
+    finally:
+        page.keyboard.up("w")
+    after_release = wire.states[-1]["tick"]
+    ready = wire.wait_for(lambda s: s["tick"] >= after_release + 3, "stationary after pickup")
+    assert not ready["pickups"]
+    assert not ready["tanks"][0]["laser_loaded"]
+    position = player_pose(ready)["position"]
+    wait_for_weapon_pixel(page, position["x"] - 0.27, position["y"], kind="shotgun")
+    page.screenshot(path=artifacts / "shotgun-loaded.png")
+
+    page.keyboard.press("Space")
+    volley = wire.wait_for(lambda s: len(s["projectiles"]) == 3, "three simultaneous pellets")
+    assert all(shot["kind"] == "shell" for shot in volley["projectiles"])
+    assert ammo(volley) == ammo(ready)
+    assert volley["tanks"][0]["next_shot"] is None
+    page.keyboard.press("Space")
+    next_shot = wire.wait_for(lambda s: len(s["projectiles"]) == 4, "ordinary shot after the volley")
+    assert ammo(next_shot) == ammo(ready) - 1
+    page.screenshot(path=artifacts / "shotgun-volley.png")
 
 
 def main():
@@ -307,13 +347,20 @@ def main():
         for page in [desktop, mobile]:
             expect(page.locator("#connection-status")).to_have_text("连接已断开")
             expect(page.get_by_role("button", name="重新连接")).to_be_enabled()
-        with running_server(options.binary.resolve(), LASER_SEED) as (_, laser_url):
+        with running_server(options.binary.resolve(), LASER_SEED) as (_, laser_url), running_server(
+            options.binary.resolve(), SHOTGUN_SEED
+        ) as (_, shotgun_url):
+            shotgun_page = browser.new_page(viewport={"width": 1366, "height": 950})
+            shotgun_page.on("pageerror", lambda error: errors.append(str(error)))
+            shotgun_wire = open_playtest(shotgun_page, shotgun_url, SHOTGUN_SEED)
             laser_page = browser.new_page(viewport={"width": 1366, "height": 950})
             laser_page.on("pageerror", lambda error: errors.append(str(error)))
             test_laser_pickup_and_fire(laser_page, laser_url, options.artifacts)
+            shotgun_page.bring_to_front()
+            test_shotgun_replaces_laser_in_browser(shotgun_page, shotgun_wire, options.artifacts)
         assert not errors, errors
         browser.close()
-    print("Browser playtest: keyboard, hit, refill, restarts, blur, responsive canvas, disconnect and laser pickups passed")
+    print("Browser playtest: keyboard, hit, refill, restarts, blur, responsive canvas, disconnect, laser and shotgun pickups passed")
 
 
 if __name__ == "__main__":
