@@ -1,15 +1,20 @@
+use rand::{Rng, SeedableRng};
+use rand_chacha::ChaCha8Rng;
+
 use crate::hull::OrientedBox;
 use crate::pickups::Pickups;
 use crate::projectile::{Impact, Projectile};
 use crate::{
-    Action, LASER_RADIUS, MUZZLE_DISTANCE, Maze, Params, Pose, ProjectileKind, TICKS_PER_SECOND,
-    Vec2, drive,
+    Action, LASER_RADIUS, MUZZLE_DISTANCE, Maze, Params, Pickup, PickupKind, Pose, ProjectileKind,
+    TICKS_PER_SECOND, Vec2, drive,
 };
 
 const MAGAZINE_CAPACITY: u8 = 5;
 const PROJECTILE_SPEED_RATIO: f64 = 1.125;
 const LASER_SPEED_MULTIPLIER: f64 = 6.0;
 const LASER_WALL_CONTACTS: u8 = 5;
+const SHOTGUN_PELLETS: usize = 3;
+const SHOTGUN_HALF_ANGLE: f64 = 20.0_f64.to_radians();
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 #[cfg_attr(feature = "serde", derive(serde::Serialize))]
@@ -27,6 +32,7 @@ pub struct TankView {
     pub pose: Pose,
     pub ammo: u8,
     pub laser_loaded: bool,
+    pub next_shot: Option<PickupKind>,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq)]
@@ -52,7 +58,7 @@ pub struct RoundView<'a> {
     pub params: &'a Params,
     pub tanks: [TankView; 2],
     pub projectiles: Vec<ProjectileView>,
-    pub pickups: &'a [Vec2],
+    pub pickups: &'a [Pickup],
     pub laser_trails: &'a [LaserTrail],
     pub outcome: RoundOutcome,
 }
@@ -65,6 +71,7 @@ pub struct Round {
     tanks: [Tank; 2],
     projectiles: Vec<Projectile>,
     pickups: Pickups,
+    shotgun_rng: ChaCha8Rng,
     laser_trails: Vec<LaserTrail>,
     outcome: RoundOutcome,
     reload_ticks: u64,
@@ -75,7 +82,13 @@ struct Tank {
     pose: Pose,
     ammo: u8,
     refill_at: Option<u64>,
-    laser_loaded: bool,
+    next_shot: Option<PickupKind>,
+}
+
+enum Shot {
+    Shell,
+    Laser,
+    Shotgun,
 }
 
 impl Tank {
@@ -86,16 +99,19 @@ impl Tank {
         }
     }
 
-    fn fire(&mut self, owner: usize, tick: u64, interval: u64) -> Option<Projectile> {
-        if std::mem::take(&mut self.laser_loaded) {
-            return Some(Projectile::new(owner, self.pose, ProjectileKind::Laser));
+    fn take_shot(&mut self, tick: u64, reload_ticks: u64) -> Option<Shot> {
+        if let Some(kind) = self.next_shot.take() {
+            return Some(match kind {
+                PickupKind::Laser => Shot::Laser,
+                PickupKind::Shotgun => Shot::Shotgun,
+            });
         }
         if self.ammo == 0 {
             return None;
         }
         self.ammo -= 1;
-        self.refill_at.get_or_insert(tick + interval);
-        Some(Projectile::new(owner, self.pose, ProjectileKind::Shell))
+        self.refill_at.get_or_insert(tick + reload_ticks);
+        Some(Shot::Shell)
     }
 }
 
@@ -116,10 +132,11 @@ impl Round {
                 pose,
                 ammo: MAGAZINE_CAPACITY,
                 refill_at: None,
-                laser_loaded: false,
+                next_shot: None,
             }),
             projectiles: Vec::new(),
             pickups: Pickups::new(seed),
+            shotgun_rng: ChaCha8Rng::seed_from_u64(seed ^ 0x94D0_49BB_1331_11EB),
             laser_trails: Vec::new(),
             outcome: RoundOutcome::Running,
             reload_ticks: interval_ticks(params.reload_secs),
@@ -142,7 +159,9 @@ impl Round {
         }
         let poses = [self.tanks[0].pose, self.tanks[1].pose];
         for (tank, collected) in self.tanks.iter_mut().zip(self.pickups.collect(poses)) {
-            tank.laser_loaded |= collected;
+            if let Some(kind) = collected {
+                tank.next_shot = Some(kind);
+            }
         }
         let mut hits = [false; 2];
         let expires_at = self.tick + self.laser_trail_ticks;
@@ -172,11 +191,34 @@ impl Round {
             }
         };
         for (index, action) in actions.into_iter().enumerate() {
-            if action.fire
-                && let Some(mut bullet) =
-                    self.tanks[index].fire(index, self.tick, self.reload_ticks)
-                && advance(&mut bullet, MUZZLE_DISTANCE, true)
-            {
+            if !action.fire {
+                continue;
+            }
+            let tank = &mut self.tanks[index];
+            let Some(shot) = tank.take_shot(self.tick, self.reload_ticks) else {
+                continue;
+            };
+            let kind = match shot {
+                Shot::Laser => ProjectileKind::Laser,
+                Shot::Shell | Shot::Shotgun => ProjectileKind::Shell,
+            };
+            let spread = matches!(shot, Shot::Shotgun).then(|| {
+                [(); SHOTGUN_PELLETS].map(|()| {
+                    (
+                        self.shotgun_rng
+                            .gen_range(-SHOTGUN_HALF_ANGLE..=SHOTGUN_HALF_ANGLE),
+                        self.shotgun_rng.gen_range(0.85..=1.15),
+                    )
+                })
+            });
+            let mut bullet = Projectile::new(index, tank.pose, kind);
+            if !advance(&mut bullet, MUZZLE_DISTANCE, true) {
+                continue;
+            }
+            if let Some(spread) = spread {
+                self.projectiles
+                    .extend(spread.map(|(angle, speed)| bullet.scattered(angle, speed)));
+            } else {
                 self.projectiles.push(bullet);
             }
         }
@@ -186,7 +228,7 @@ impl Round {
             let distance = if bullet.kind == ProjectileKind::Laser {
                 projectile_step * LASER_SPEED_MULTIPLIER
             } else {
-                projectile_step
+                projectile_step * bullet.speed_scale
             };
             advance(bullet, distance, false)
         });
@@ -221,7 +263,8 @@ impl Round {
                 TankView {
                     pose: tank.pose,
                     ammo: tank.ammo,
-                    laser_loaded: tank.laser_loaded,
+                    laser_loaded: tank.next_shot == Some(PickupKind::Laser),
+                    next_shot: tank.next_shot,
                 }
             }),
             projectiles: self
@@ -232,7 +275,7 @@ impl Round {
                     kind: bullet.kind,
                 })
                 .collect(),
-            pickups: self.pickups.positions(),
+            pickups: self.pickups.items(),
             laser_trails: &self.laser_trails,
             outcome: self.outcome,
         }
@@ -344,6 +387,191 @@ mod tests {
     }
 
     #[test]
+    fn latest_pickup_replaces_the_pending_shot() {
+        for order in [
+            [PickupKind::Laser, PickupKind::Shotgun],
+            [PickupKind::Shotgun, PickupKind::Laser],
+        ] {
+            let mut round = Round::new(42, Params::default()).unwrap();
+            for tick in [900, 1500, 2100, 2700, 3300] {
+                round.tick = tick - 1;
+                idle(&mut round, 1);
+            }
+            for kind in order {
+                let item = round
+                    .view()
+                    .pickups
+                    .iter()
+                    .find(|item| item.kind == kind)
+                    .unwrap();
+                let position = item.position;
+                round.tanks[0].pose.position = position;
+                idle(&mut round, 1);
+                assert_eq!(round.view().tanks[0].next_shot, Some(kind));
+                assert!(
+                    !round
+                        .view()
+                        .pickups
+                        .iter()
+                        .any(|item| item.position == position)
+                );
+            }
+        }
+    }
+
+    #[test]
+    fn shotgun_fire_uses_no_ammo() {
+        let mut round = fixture(
+            vec![],
+            pose(1.0, 1.0, 0.0),
+            pose(1.0, 7.0, 0.0),
+            Params::default(),
+        );
+        round.tanks[0].ammo = 0;
+        round.tanks[0].refill_at = Some(4);
+        round.tanks[0].next_shot = Some(PickupKind::Shotgun);
+
+        fire(&mut round);
+        let volley = round.view();
+        assert_eq!(volley.projectiles.len(), 3);
+        assert!(
+            volley
+                .projectiles
+                .iter()
+                .all(|shot| shot.kind == ProjectileKind::Shell)
+        );
+        assert_eq!(volley.tanks[0].ammo, 0);
+        assert_eq!(volley.tanks[0].next_shot, None);
+        assert_eq!(round.tanks[0].refill_at, Some(4));
+        fire(&mut round);
+        assert_eq!(round.view().projectiles.len(), 3);
+        idle(&mut round, 1);
+        assert_eq!(round.view().tanks[0].ammo, 0);
+        fire(&mut round);
+        assert_eq!(round.view().projectiles.len(), 4);
+        assert_eq!(round.view().tanks[0].ammo, 0);
+    }
+
+    #[test]
+    fn shotgun_randomness_is_replayable_and_independent() {
+        let make_round = |seed| {
+            Round::from_maze(
+                seed,
+                Params::default(),
+                Maze {
+                    width: 12,
+                    height: 8,
+                    walls: vec![],
+                },
+                [pose(1.0, 1.0, 0.0), pose(1.0, 7.0, 0.0)],
+            )
+        };
+        let mut has_one_sided_volley = false;
+        let mut has_different_speeds = false;
+        for seed in 0..24 {
+            let mut first = make_round(seed);
+            let mut replay = make_round(seed);
+            first.tanks[0].next_shot = Some(PickupKind::Shotgun);
+            replay.tanks[0].next_shot = Some(PickupKind::Shotgun);
+            fire(&mut first);
+            fire(&mut replay);
+            assert_eq!(first.view(), replay.view());
+            let positions = first.view().projectiles;
+            assert_eq!(positions.len(), 3);
+            idle(&mut first, 1);
+            idle(&mut replay, 1);
+            assert_eq!(first.view(), replay.view());
+            let samples: Vec<_> = first
+                .view()
+                .projectiles
+                .iter()
+                .zip(&positions)
+                .map(|(after, before)| {
+                    let delta = after.position - before.position;
+                    let angle = delta.y.atan2(delta.x).to_degrees();
+                    let speed = delta.x.hypot(delta.y) * 60.0 / 2.5;
+                    assert!((-20.0..=20.0).contains(&angle));
+                    assert!((0.85..=1.15).contains(&speed));
+                    (angle, speed)
+                })
+                .collect();
+            has_one_sided_volley |= samples.iter().all(|(angle, _)| *angle > 0.0)
+                || samples.iter().all(|(angle, _)| *angle < 0.0);
+            has_different_speeds |= samples
+                .windows(2)
+                .any(|pair| (pair[0].1 - pair[1].1).abs() > 0.001);
+        }
+        assert!(has_one_sided_volley);
+        assert!(has_different_speeds);
+
+        let mut active = make_round(42);
+        let mut idle_round = make_round(42);
+        for round in [&mut active, &mut idle_round] {
+            round.tick = 899;
+            idle(round, 1);
+        }
+        active.tanks[0].next_shot = Some(PickupKind::Shotgun);
+        fire(&mut active);
+        assert_eq!(active.view().projectiles.len(), 3);
+        for round in [&mut active, &mut idle_round] {
+            round.projectiles.clear();
+            round.tick = 1499;
+            idle(round, 1);
+        }
+        assert_eq!(active.view().pickups, idle_round.view().pickups);
+    }
+
+    #[test]
+    fn shotgun_shares_one_muzzle_sweep() {
+        let in_front_of_wall = |wall_contacts| {
+            fixture(
+                vec![wall((1.0, 0.0), (1.0, 2.0))],
+                pose(0.62, 0.5, 0.0),
+                pose(3.5, 4.0, 0.0),
+                Params {
+                    wall_contacts,
+                    forward_secs: 3.0,
+                    ..Params::default()
+                },
+            )
+        };
+        let mut round = in_front_of_wall(10);
+        round.tanks[0].next_shot = Some(PickupKind::Shotgun);
+        fire(&mut round);
+        let first = round.view().projectiles;
+        assert_eq!(first.len(), 3);
+        idle(&mut round, 1);
+        for (next, old) in round.view().projectiles.iter().zip(&first) {
+            let delta = next.position - old.position;
+            assert!(delta.x < 0.0);
+            assert!((delta.y.atan2(-delta.x).to_degrees().abs()) <= 20.0);
+            let origin = old.position - delta;
+            assert!((origin.x - 0.896).abs() < 1e-9);
+            assert!((origin.y - 0.5).abs() < 1e-9);
+        }
+        assert_eq!(round.view().projectiles.len(), 3);
+
+        let mut blocked = in_front_of_wall(1);
+        blocked.tanks[0].next_shot = Some(PickupKind::Shotgun);
+        fire(&mut blocked);
+        assert!(blocked.view().projectiles.is_empty());
+        assert_eq!(blocked.view().tanks[0].next_shot, None);
+        assert_eq!(blocked.view().tanks[0].ammo, 5);
+
+        let mut target_in_muzzle = fixture(
+            vec![],
+            pose(1.0, 1.0, 0.0),
+            pose(1.44, 1.0, 0.0),
+            Params::default(),
+        );
+        target_in_muzzle.tanks[0].next_shot = Some(PickupKind::Shotgun);
+        fire(&mut target_in_muzzle);
+        assert_eq!(target_in_muzzle.view().outcome, RoundOutcome::TargetHit);
+        assert!(target_in_muzzle.view().projectiles.is_empty());
+        assert_eq!(target_in_muzzle.view().tanks[0].ammo, 5);
+    }
+
+    #[test]
     fn laser_uses_only_one_pending_shot() {
         let mut round = fixture(
             vec![],
@@ -351,13 +579,19 @@ mod tests {
             pose(1.0, 7.0, 0.0),
             Params::default(),
         );
-        round.tick = 899;
-        idle(&mut round, 1);
-        if round.view().pickups.len() == 1 {
-            round.tick = 1499;
+        for tick in [900, 1500, 2100, 2700, 3300] {
+            round.tick = tick - 1;
             idle(&mut round, 1);
         }
-        let positions = round.view().pickups[..2].to_vec();
+        let positions: Vec<_> = round
+            .view()
+            .pickups
+            .iter()
+            .filter(|item| item.kind == PickupKind::Laser)
+            .take(2)
+            .map(|item| item.position)
+            .collect();
+        assert_eq!(positions.len(), 2);
         round.tanks[0].ammo = 0;
         let refill_at = round.tick + 6;
         round.tanks[0].refill_at = Some(refill_at);
@@ -365,7 +599,13 @@ mod tests {
             round.tanks[0].pose.position = position;
             idle(&mut round, 1);
             assert!(round.view().tanks[0].laser_loaded);
-            assert!(!round.view().pickups.contains(&position));
+            assert!(
+                !round
+                    .view()
+                    .pickups
+                    .iter()
+                    .any(|item| item.position == position)
+            );
         }
         round.tanks[0].pose = pose(1.0, 1.0, 0.0);
         fire(&mut round);
@@ -396,7 +636,7 @@ mod tests {
             pose(1.0, 7.0, 0.0),
             Params::default(),
         );
-        round.tanks[0].laser_loaded = true;
+        round.tanks[0].next_shot = Some(PickupKind::Laser);
         fire(&mut round);
         let view = round.view();
         assert_eq!(view.laser_trails.len(), 1);
@@ -415,7 +655,7 @@ mod tests {
             pose(4.0, 4.0, 0.0),
             Params::default(),
         );
-        against_wall.tanks[0].laser_loaded = true;
+        against_wall.tanks[0].next_shot = Some(PickupKind::Laser);
         fire(&mut against_wall);
         let view = against_wall.view();
         assert_eq!(view.outcome, RoundOutcome::SelfHit);
@@ -439,7 +679,7 @@ mod tests {
         assert_eq!(ordinary.view().outcome, RoundOutcome::TargetHit);
 
         let mut laser = make_round();
-        laser.tanks[0].laser_loaded = true;
+        laser.tanks[0].next_shot = Some(PickupKind::Laser);
         fire(&mut laser);
         idle(&mut laser, 24);
         assert_eq!(laser.view().outcome, RoundOutcome::Running);
@@ -479,7 +719,7 @@ mod tests {
             pose(1.86, 1.0, 0.0),
             Params::default(),
         );
-        hit.tanks[0].laser_loaded = true;
+        hit.tanks[0].next_shot = Some(PickupKind::Laser);
         fire(&mut hit);
         idle(&mut hit, 1);
         let view = hit.view();
@@ -526,7 +766,7 @@ mod tests {
             )
         };
         let mut drives_into_own_trail = make_round(0.2);
-        drives_into_own_trail.tanks[0].laser_loaded = true;
+        drives_into_own_trail.tanks[0].next_shot = Some(PickupKind::Laser);
         fire(&mut drives_into_own_trail);
         drives_into_own_trail.projectiles.clear();
         for _ in 0..2 {
@@ -539,7 +779,7 @@ mod tests {
         for (seconds, ticks) in [(0.2, 12), (0.5, 30)] {
             let mut expires = make_round(seconds);
             expires.tick = 99;
-            expires.tanks[0].laser_loaded = true;
+            expires.tanks[0].next_shot = Some(PickupKind::Laser);
             fire(&mut expires);
             idle(&mut expires, 1);
             let [first, second]: [LaserTrail; 2] = expires.view().laser_trails.try_into().unwrap();

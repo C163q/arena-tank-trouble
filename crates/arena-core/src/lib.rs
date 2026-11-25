@@ -8,7 +8,8 @@ mod round;
 
 pub use maze::{Maze, Pose, Wall};
 pub use motion::{Action, Params, drive};
-pub use pickups::LASER_PICKUP_SIZE;
+pub use pickups::PICKUP_SIZE as LASER_PICKUP_SIZE;
+pub use pickups::{PICKUP_SIZE, Pickup, PickupKind};
 pub use projectile::ProjectileKind;
 pub use round::{LaserTrail, ProjectileView, Round, RoundOutcome, RoundView, TankView};
 

@@ -26,9 +26,11 @@ pub(super) struct FlightSegment {
     pub after_bounce: bool,
 }
 
+#[derive(Clone)]
 pub(super) struct Projectile {
     pub position: Vec2,
     pub(super) kind: ProjectileKind,
+    pub(super) speed_scale: f64,
     direction: Vec2,
     owner: usize,
     contacts: u8,
@@ -44,9 +46,22 @@ impl Projectile {
         Self {
             position: pose.position,
             kind,
+            speed_scale: 1.0,
             direction: Vec2::from_angle(pose.angle),
             owner,
             contacts: 0,
+        }
+    }
+
+    pub fn scattered(&self, angle_offset: f64, speed_scale: f64) -> Self {
+        let (sin, cos) = angle_offset.sin_cos();
+        Self {
+            direction: Vec2::new(
+                self.direction.x * cos - self.direction.y * sin,
+                self.direction.x * sin + self.direction.y * cos,
+            ),
+            speed_scale,
+            ..self.clone()
         }
     }
 
@@ -112,5 +127,45 @@ impl Projectile {
                     .map(|time| (index, time))
             })
             .min_by(|a, b| a.1.total_cmp(&b.1))
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use crate::Wall;
+
+    use super::*;
+
+    #[test]
+    fn scattered_shell_inherits_muzzle_wall_contact() {
+        let poses = [
+            Pose {
+                position: Vec2::new(0.62, 0.5),
+                angle: 0.0,
+            },
+            Pose {
+                position: Vec2::new(3.5, 3.5),
+                angle: 0.0,
+            },
+        ];
+        let maze = Maze {
+            width: 4,
+            height: 4,
+            walls: vec![Wall {
+                a: Vec2::new(1.0, 0.0),
+                b: Vec2::new(1.0, 2.0),
+            }],
+        };
+        let mut barrel = Projectile::new(0, poses[0], ProjectileKind::Shell);
+        assert!(
+            barrel
+                .advance(&maze, &poses, crate::MUZZLE_DISTANCE, 10, |_| {})
+                .is_none()
+        );
+        let pellet = barrel.scattered(0.2, 1.1);
+        assert_eq!(pellet.contacts, 1);
+        assert_eq!(pellet.owner, 0);
+        assert_eq!(pellet.position, barrel.position);
+        assert_eq!(pellet.speed_scale, 1.1);
     }
 }
