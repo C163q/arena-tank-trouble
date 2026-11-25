@@ -176,9 +176,30 @@ def test_keyboard_hit_and_restart(page, url):
     page.keyboard.up("Space")
     assert sum(message["type"] == "fire" for message in wire.commands) == 1
     wire.wait_for(lambda s: ammo(s) == 5 and s["outcome"] == "running", "magazine refill")
+    pending = wire.wait_for(lambda s: s["victory_at"] is not None, "victory delay")
+    assert pending["outcome"] == "running" and pending["target_hits"] == 0
+    assert pending["tanks"][0]["alive"] and not pending["tanks"][1]["alive"]
+    expect(page.locator("#outcome")).to_have_text("等待结算")
+    page.wait_for_function(
+        """({x, y}) => {
+          const ctx = document.querySelector("canvas").getContext("2d");
+          const pixel = new DOMPoint(x, y).matrixTransform(ctx.getTransform());
+          const color = ctx.getImageData(Math.floor(pixel.x), Math.floor(pixel.y), 1, 1).data;
+          return color.join(",") === "241,242,238,255";
+        }""",
+        arg=pending["tanks"][1]["pose"]["position"],
+    )
+    page.keyboard.down("d")
+    wire.wait_for(
+        lambda s: s["victory_at"] is not None
+        and player_pose(s)["angle"] != player_pose(pending)["angle"],
+        "survivor can steer during the victory delay",
+    )
+    page.keyboard.up("d")
     complete = wire.wait_for(lambda s: s["outcome"] == "target_hit", "target hit")
+    assert complete["tick"] == pending["victory_at"]
     assert complete["target_hits"] == 1
-    expect(page.locator("#outcome")).to_have_text("命中静止靶")
+    expect(page.locator("#outcome")).to_have_text("获胜")
     expect(page.locator("#target-hits")).to_have_text("1")
     page.keyboard.press("d")
     assert wire.states[-1]["tick"] == complete["tick"]

@@ -23,9 +23,9 @@ const directions = {
 };
 const outcomes = {
   running: "练习中",
-  target_hit: "命中静止靶",
-  self_hit: "被反弹弹击中",
-  draw: "同时命中",
+  target_hit: "获胜",
+  self_hit: "静止靶获胜",
+  draw: "平局",
 };
 const held = new Set();
 let state;
@@ -89,7 +89,9 @@ function applyState(next) {
   }
   if (next.target_hits !== previous?.target_hits) targetHits.textContent = next.target_hits;
   if (next.self_hits !== previous?.self_hits) selfHits.textContent = next.self_hits;
-  if (next.outcome !== previous?.outcome) outcome.textContent = outcomes[next.outcome];
+  if (next.outcome !== previous?.outcome || next.victory_at !== previous?.victory_at) {
+    outcome.textContent = next.victory_at === null ? outcomes[next.outcome] : "等待结算";
+  }
 }
 
 function connect() {
@@ -134,7 +136,8 @@ window.addEventListener("keydown", (event) => {
   if (target instanceof Element && target.closest("input, select, textarea, [contenteditable]")) return;
   if (code === "Space" && target instanceof Element && target.closest("button")) return;
   event.preventDefault();
-  if (repeat || restartPending || socket?.readyState !== WebSocket.OPEN || state?.outcome !== "running") return;
+  if (repeat || restartPending || socket?.readyState !== WebSocket.OPEN ||
+      state?.outcome !== "running" || !state.tanks[0].alive) return;
   if (code === "Space") {
     send("fire");
   } else {

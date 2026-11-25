@@ -2,13 +2,15 @@ use rand::{Rng, SeedableRng};
 use rand_chacha::ChaCha8Rng;
 
 use crate::hull::OrientedBox;
+use crate::motion::drive_with_other;
 use crate::pickups::Pickups;
 use crate::projectile::{Impact, Projectile};
 use crate::{
     Action, LASER_RADIUS, MUZZLE_DISTANCE, Maze, Params, Pickup, PickupKind, Pose, ProjectileKind,
-    TICKS_PER_SECOND, Vec2, drive,
+    TICKS_PER_SECOND, Vec2,
 };
 
+const VICTORY_DELAY_TICKS: u64 = 2 * TICKS_PER_SECOND as u64;
 const MAGAZINE_CAPACITY: u8 = 5;
 const PROJECTILE_SPEED_RATIO: f64 = 1.125;
 const LASER_SPEED_MULTIPLIER: f64 = 6.0;
@@ -30,6 +32,7 @@ pub enum RoundOutcome {
 #[cfg_attr(feature = "serde", derive(serde::Serialize))]
 pub struct TankView {
     pub pose: Pose,
+    pub alive: bool,
     pub ammo: u8,
     pub laser_loaded: bool,
     pub next_shot: Option<PickupKind>,
@@ -61,6 +64,7 @@ pub struct RoundView<'a> {
     pub pickups: &'a [Pickup],
     pub laser_trails: &'a [LaserTrail],
     pub outcome: RoundOutcome,
+    pub victory_at: Option<u64>,
 }
 
 pub struct Round {
@@ -74,12 +78,14 @@ pub struct Round {
     shotgun_rng: ChaCha8Rng,
     laser_trails: Vec<LaserTrail>,
     outcome: RoundOutcome,
+    victory_at: Option<u64>,
     reload_ticks: u64,
     laser_trail_ticks: u64,
 }
 
 struct Tank {
     pose: Pose,
+    alive: bool,
     ammo: u8,
     refill_at: Option<u64>,
     next_shot: Option<PickupKind>,
@@ -92,6 +98,10 @@ enum Shot {
 }
 
 impl Tank {
+    fn live_pose(&self) -> Option<Pose> {
+        self.alive.then_some(self.pose)
+    }
+
     fn refill(&mut self, tick: u64, interval: u64) {
         if self.refill_at == Some(tick) {
             self.ammo += 1;
@@ -130,6 +140,7 @@ impl Round {
             params,
             tanks: spawns.map(|pose| Tank {
                 pose,
+                alive: true,
                 ammo: MAGAZINE_CAPACITY,
                 refill_at: None,
                 next_shot: None,
@@ -139,6 +150,7 @@ impl Round {
             shotgun_rng: ChaCha8Rng::seed_from_u64(seed ^ 0x94D0_49BB_1331_11EB),
             laser_trails: Vec::new(),
             outcome: RoundOutcome::Running,
+            victory_at: None,
             reload_ticks: interval_ticks(params.reload_secs),
             laser_trail_ticks: interval_ticks(params.laser_trail_secs),
         }
@@ -152,12 +164,15 @@ impl Round {
         self.laser_trails
             .retain(|trail| trail.expires_at > self.tick);
         for (index, action) in actions.into_iter().enumerate() {
-            let other = self.tanks[1 - index].pose;
+            let other = self.tanks[1 - index].live_pose();
             let tank = &mut self.tanks[index];
+            if !tank.alive {
+                continue;
+            }
             tank.refill(self.tick, self.reload_ticks);
-            tank.pose = drive(&self.maze, tank.pose, other, action, &self.params);
+            tank.pose = drive_with_other(&self.maze, tank.pose, other, action, &self.params);
         }
-        let poses = [self.tanks[0].pose, self.tanks[1].pose];
+        let poses = self.tanks.each_ref().map(Tank::live_pose);
         for (tank, collected) in self.tanks.iter_mut().zip(self.pickups.collect(poses)) {
             if let Some(kind) = collected {
                 tank.next_shot = Some(kind);
@@ -191,10 +206,10 @@ impl Round {
             }
         };
         for (index, action) in actions.into_iter().enumerate() {
-            if !action.fire {
+            let tank = &mut self.tanks[index];
+            if !action.fire || !tank.alive {
                 continue;
             }
-            let tank = &mut self.tanks[index];
             let Some(shot) = tank.take_shot(self.tick, self.reload_ticks) else {
                 continue;
             };
@@ -233,22 +248,36 @@ impl Round {
             advance(bullet, distance, false)
         });
         // Include new segments: their final point can touch both tanks at once.
-        for (hit, pose) in hits.iter_mut().zip(poses) {
+        for ((tank, pose), hit) in self.tanks.iter_mut().zip(poses).zip(hits) {
+            let Some(pose) = pose else { continue };
             let hull = OrientedBox::tank(pose);
-            *hit = *hit
-                || self.laser_trails.iter().any(|trail| {
+            tank.alive = !hit
+                && !self.laser_trails.iter().any(|trail| {
                     hull.disc_contact(trail.start, trail.end - trail.start, LASER_RADIUS)
                         .is_some()
                 });
         }
-        self.outcome = match hits {
-            [false, false] => RoundOutcome::Running,
-            [false, true] => RoundOutcome::TargetHit,
-            [true, false] => RoundOutcome::SelfHit,
-            [true, true] => RoundOutcome::Draw,
-        };
+        let poses = self.tanks.each_ref().map(Tank::live_pose);
+        match poses {
+            [None, None] => self.outcome = RoundOutcome::Draw,
+            [Some(_), Some(_)] => {}
+            _ => {
+                let deadline = self
+                    .victory_at
+                    .get_or_insert(self.tick + VICTORY_DELAY_TICKS);
+                if self.tick == *deadline {
+                    self.outcome = if self.tanks[0].alive {
+                        RoundOutcome::TargetHit
+                    } else {
+                        RoundOutcome::SelfHit
+                    };
+                }
+            }
+        }
         if self.outcome == RoundOutcome::Running {
             self.pickups.spawn_due(self.tick, &self.maze, poses);
+        } else {
+            self.victory_at = None;
         }
     }
 
@@ -262,6 +291,7 @@ impl Round {
                 let tank = &self.tanks[index];
                 TankView {
                     pose: tank.pose,
+                    alive: tank.alive,
                     ammo: tank.ammo,
                     laser_loaded: tank.next_shot == Some(PickupKind::Laser),
                     next_shot: tank.next_shot,
@@ -278,6 +308,7 @@ impl Round {
             pickups: self.pickups.items(),
             laser_trails: &self.laser_trails,
             outcome: self.outcome,
+            victory_at: self.victory_at,
         }
     }
 }
@@ -366,7 +397,7 @@ mod tests {
         let mut stationary = make_round();
         fire(&mut stationary);
         idle(&mut stationary, 70);
-        assert_eq!(stationary.view().outcome, RoundOutcome::TargetHit);
+        assert!(!stationary.view().tanks[1].alive);
 
         let mut turning = make_round();
         fire(&mut turning);
@@ -382,7 +413,7 @@ mod tests {
         idle(&mut turning, 60);
         let view = turning.view();
         assert_eq!(view.tanks[1].pose.position, start.position);
-        assert_eq!(view.outcome, RoundOutcome::Running);
+        assert!(view.tanks[1].alive);
         assert!(view.projectiles[0].position.x > start.position.x + 0.3);
     }
 
@@ -573,7 +604,7 @@ mod tests {
         );
         target_in_muzzle.tanks[0].next_shot = Some(PickupKind::Shotgun);
         fire(&mut target_in_muzzle);
-        assert_eq!(target_in_muzzle.view().outcome, RoundOutcome::TargetHit);
+        assert!(!target_in_muzzle.view().tanks[1].alive);
         assert!(target_in_muzzle.view().projectiles.is_empty());
         assert_eq!(target_in_muzzle.view().tanks[0].ammo, 5);
     }
@@ -654,7 +685,7 @@ mod tests {
         idle(&mut round, 1);
         assert!((round.view().projectiles[0].position.x - head.x - 15.0 / 60.0).abs() < 1e-9);
         assert_eq!(round.view().tanks[0].ammo, 5);
-        assert_eq!(round.view().outcome, RoundOutcome::Running);
+        assert!(round.view().tanks[0].alive);
 
         let mut against_wall = fixture(
             vec![wall((1.0, 0.0), (1.0, 2.0))],
@@ -665,7 +696,7 @@ mod tests {
         against_wall.tanks[0].next_shot = Some(PickupKind::Laser);
         fire(&mut against_wall);
         let view = against_wall.view();
-        assert_eq!(view.outcome, RoundOutcome::SelfHit);
+        assert!(!view.tanks[0].alive);
         assert!((view.laser_trails[0].start.x - 0.93).abs() < 1e-9);
         assert!(view.laser_trails[0].end.x < view.laser_trails[0].start.x);
     }
@@ -683,13 +714,13 @@ mod tests {
         let mut ordinary = make_round();
         fire(&mut ordinary);
         idle(&mut ordinary, 24);
-        assert_eq!(ordinary.view().outcome, RoundOutcome::TargetHit);
+        assert!(!ordinary.view().tanks[1].alive);
 
         let mut laser = make_round();
         laser.tanks[0].next_shot = Some(PickupKind::Laser);
         fire(&mut laser);
         idle(&mut laser, 24);
-        assert_eq!(laser.view().outcome, RoundOutcome::Running);
+        assert!(laser.view().tanks[1].alive);
         assert!(laser.view().projectiles[0].position.x > 2.0);
     }
 
@@ -730,7 +761,7 @@ mod tests {
         fire(&mut hit);
         idle(&mut hit, 1);
         let view = hit.view();
-        assert_eq!(view.outcome, RoundOutcome::TargetHit);
+        assert!(!view.tanks[1].alive);
         assert!(view.projectiles.is_empty());
         assert!((view.laser_trails.last().unwrap().end.x - 1.62).abs() < 1e-9);
     }
@@ -778,9 +809,11 @@ mod tests {
         drives_into_own_trail.projectiles.clear();
         for _ in 0..2 {
             drives_into_own_trail.step([forward, Action::default()]);
-            assert_eq!(drives_into_own_trail.view().outcome, RoundOutcome::Running);
+            assert!(drives_into_own_trail.view().tanks[0].alive);
         }
         drives_into_own_trail.step([forward, Action::default()]);
+        assert!(!drives_into_own_trail.view().tanks[0].alive);
+        idle(&mut drives_into_own_trail, 120);
         assert_eq!(drives_into_own_trail.view().outcome, RoundOutcome::SelfHit);
 
         for (seconds, ticks) in [(0.2, 12), (0.5, 30)] {
@@ -800,7 +833,7 @@ mod tests {
             for _ in 0..3 {
                 expires.step([forward, Action::default()]);
             }
-            assert_eq!(expires.view().outcome, RoundOutcome::Running);
+            assert!(expires.view().tanks[0].alive);
         }
     }
 
@@ -855,7 +888,7 @@ mod tests {
 
     #[test]
     fn wall_at_muzzle_counts_as_first_contact() {
-        for (limit, expected) in [(5, RoundOutcome::SelfHit), (1, RoundOutcome::Running)] {
+        for (limit, alive) in [(5, false), (1, true)] {
             let mut round = fixture(
                 vec![wall((1.0, 0.0), (1.0, 1.0))],
                 pose(0.73, 0.5, 0.0),
@@ -869,7 +902,7 @@ mod tests {
             let view = round.view();
             assert_eq!(view.tanks[0].ammo, 4);
             assert!(view.projectiles.is_empty());
-            assert_eq!(view.outcome, expected);
+            assert_eq!(view.tanks[0].alive, alive);
         }
     }
 
@@ -900,9 +933,73 @@ mod tests {
         };
         let tanks = [pose(1.0, 1.0, 0.0), pose(2.0, 1.0, FRAC_PI_4)];
         assert!(matches!(
-            shot.advance(&arena, &tanks, 2.0, 2, |_| {}),
+            shot.advance(&arena, &tanks.map(Some), 2.0, 2, |_| {}),
             Some(Impact::Tank(1))
         ));
+    }
+
+    #[test]
+    fn sole_survivor_can_drive_and_fire_until_the_full_delay() {
+        let mut round = fixture(
+            vec![],
+            pose(1.0, 1.0, 0.0),
+            pose(1.58, 1.0, PI),
+            Params::default(),
+        );
+        fire(&mut round);
+        assert_eq!(round.view().outcome, RoundOutcome::Running);
+        let death_tick = round.view().tick;
+        let target_at_death = round.view().tanks[1];
+        assert!(!target_at_death.alive);
+        assert_eq!(round.view().victory_at, Some(death_tick + 120));
+
+        let mut moving = Action {
+            forward: true,
+            fire: true,
+            ..Action::default()
+        };
+        round.step([moving; 2]);
+        moving.fire = false;
+        for _ in 1..18 {
+            round.step([moving; 2]);
+        }
+        let view = round.view();
+        assert!(view.tanks[0].pose.position.x > target_at_death.pose.position.x);
+        assert_eq!(view.tanks[0].ammo, 3);
+        assert_eq!(view.tanks[1], target_at_death);
+        assert_eq!(view.projectiles.len(), 1);
+
+        idle(&mut round, 101);
+        assert_eq!(round.view().tick, death_tick + 119);
+        assert_eq!(round.view().outcome, RoundOutcome::Running);
+        idle(&mut round, 1);
+        assert_eq!(round.view().outcome, RoundOutcome::TargetHit);
+        assert_eq!(round.view().victory_at, None);
+        idle(&mut round, 1);
+        assert_eq!(round.view().tick, death_tick + 120);
+    }
+
+    #[test]
+    fn eliminated_tanks_projectile_can_force_a_draw_through_the_deadline() {
+        for (position, hit_tick) in [(1.42, 5), (6.27, 121)] {
+            let mut round = fixture(
+                vec![],
+                pose(1.0, 1.0, 0.0),
+                pose(1.58, 1.0, PI),
+                Params::default(),
+            );
+            round.projectiles.push(Projectile::new(
+                1,
+                pose(position, 1.0, PI),
+                ProjectileKind::Shell,
+            ));
+            fire(&mut round);
+            idle(&mut round, hit_tick - 2);
+            assert_eq!(round.view().outcome, RoundOutcome::Running);
+            idle(&mut round, 1);
+            assert_eq!(round.view().outcome, RoundOutcome::Draw);
+            assert_eq!(round.view().tick, hit_tick as u64);
+        }
     }
 
     #[test]

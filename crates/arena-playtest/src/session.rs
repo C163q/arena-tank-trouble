@@ -169,6 +169,7 @@ impl Session {
             "laser_trails": view.laser_trails,
             "params": view.params,
             "outcome": view.outcome,
+            "victory_at": view.victory_at,
             "target_hits": self.target_hits,
             "self_hits": self.self_hits,
         })
@@ -246,16 +247,29 @@ mod tests {
     fn scores_once_and_keeps_score_only_on_same_map() {
         let mut game = Session::new(407);
         game.receive(&fire(0));
-        for _ in 0..95 {
-            game.tick();
+        let pending = (0..95)
+            .map(|_| game.tick())
+            .find(|snapshot| !snapshot["victory_at"].is_null())
+            .expect("static target destroyed");
+        let deadline = pending["tick"].as_u64().unwrap() + 120;
+        assert_eq!(pending["victory_at"], deadline);
+        assert_eq!(pending["tanks"][1]["alive"], false);
+        for _ in 0..119 {
+            let state = game.tick();
+            assert_eq!(state["outcome"], "running");
+            assert_eq!(state["target_hits"], 0);
         }
-        let complete = game.state();
+        let complete = game.tick();
+        assert_eq!(complete["tick"], deadline);
+        assert!(complete["victory_at"].is_null());
         assert_eq!(complete["outcome"], "target_hit");
         assert_eq!(complete["target_hits"], 1);
         assert_eq!(game.tick(), complete);
         let same = game.receive(&restart(0, "same", 1.0)).unwrap();
         assert_eq!(same["target_hits"], 1);
         assert_eq!(same["outcome"], "running");
+        assert!(same["victory_at"].is_null());
+        assert_eq!(same["tanks"][1]["alive"], true);
         let new = game.receive(&restart(1, "new", 1.0)).unwrap();
         assert_eq!(new["target_hits"], 0);
     }

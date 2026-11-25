@@ -111,8 +111,8 @@ export function render(canvas, state) {
   }
   ctx.stroke();
 
-  tank(ctx, state.tanks[0], palette.player, state.geometry);
-  tank(ctx, state.tanks[1], palette.target, state.geometry);
+  if (state.tanks[0].alive) tank(ctx, state.tanks[0], palette.player, state.geometry);
+  if (state.tanks[1].alive) tank(ctx, state.tanks[1], palette.target, state.geometry);
 
   for (const { kind, position: { x, y } } of state.projectiles) {
     const laser = kind === "laser";

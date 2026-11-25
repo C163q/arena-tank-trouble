@@ -68,7 +68,7 @@ impl Projectile {
     pub fn advance(
         &mut self,
         maze: &Maze,
-        tanks: &[Pose; 2],
+        tanks: &[Option<Pose>; 2],
         mut distance: f64,
         contact_limit: u8,
         mut record: impl FnMut(FlightSegment),
@@ -116,13 +116,13 @@ impl Projectile {
         }
     }
 
-    fn first_tank_contact(&self, tanks: &[Pose; 2], delta: Vec2) -> Option<(usize, f64)> {
+    fn first_tank_contact(&self, tanks: &[Option<Pose>; 2], delta: Vec2) -> Option<(usize, f64)> {
         tanks
             .iter()
             .enumerate()
             .filter(|&(index, _)| index != self.owner || self.contacts != 0)
             .filter_map(|(index, &tank)| {
-                OrientedBox::tank(tank)
+                OrientedBox::tank(tank?)
                     .disc_contact(self.position, delta, self.kind.radius())
                     .map(|time| (index, time))
             })
@@ -159,7 +159,7 @@ mod tests {
         let mut barrel = Projectile::new(0, poses[0], ProjectileKind::Shell);
         assert!(
             barrel
-                .advance(&maze, &poses, crate::MUZZLE_DISTANCE, 10, |_| {})
+                .advance(&maze, &poses.map(Some), crate::MUZZLE_DISTANCE, 10, |_| {})
                 .is_none()
         );
         let pellet = barrel.scattered(0.2, 1.1);

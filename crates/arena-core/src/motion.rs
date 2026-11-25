@@ -62,7 +62,17 @@ impl Params {
     }
 }
 
-pub fn drive(maze: &Maze, mut pose: Pose, other: Pose, action: Action, params: &Params) -> Pose {
+pub fn drive(maze: &Maze, pose: Pose, other: Pose, action: Action, params: &Params) -> Pose {
+    drive_with_other(maze, pose, Some(other), action, params)
+}
+
+pub(super) fn drive_with_other(
+    maze: &Maze,
+    mut pose: Pose,
+    other: Option<Pose>,
+    action: Action,
+    params: &Params,
+) -> Pose {
     let turn = f64::from(i8::from(action.turn_right) - i8::from(action.turn_left));
     let speed = match (action.forward, action.reverse) {
         (true, false) => 1.0 / params.forward_secs,
@@ -83,8 +93,10 @@ pub fn drive(maze: &Maze, mut pose: Pose, other: Pose, action: Action, params: &
         .filter(|bounds| bounds.near(pose.position, reach))
         .map(OrientedBox::axis_aligned)
         .collect();
-    let separation = other.position - pose.position;
-    if separation.dot(separation) <= (reach + hull_radius).powi(2) {
+    if let Some(other) = other.filter(|other| {
+        let separation = other.position - pose.position;
+        separation.dot(separation) <= (reach + hull_radius).powi(2)
+    }) {
         obstacles.push(OrientedBox::tank(other));
     }
 
