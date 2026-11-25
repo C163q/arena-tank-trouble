@@ -32,8 +32,8 @@ pub(super) struct Projectile {
     pub(super) kind: ProjectileKind,
     pub(super) speed_scale: f64,
     direction: Vec2,
-    owner: usize,
-    contacts: u8,
+    pub(super) owner: usize,
+    pub(super) contacts: u8,
 }
 
 pub(super) enum Impact {
@@ -53,6 +53,10 @@ impl Projectile {
         }
     }
 
+    pub fn velocity(&self, speed: f64) -> Vec2 {
+        self.direction.scale(speed * self.speed_scale)
+    }
+
     pub fn scattered(&self, angle_offset: f64, speed_scale: f64) -> Self {
         let (sin, cos) = angle_offset.sin_cos();
         Self {
@@ -68,7 +72,7 @@ impl Projectile {
     pub fn advance(
         &mut self,
         maze: &Maze,
-        tanks: &[Option<Pose>; 2],
+        tanks: &[Option<Pose>],
         mut distance: f64,
         contact_limit: u8,
         mut record: impl FnMut(FlightSegment),
@@ -116,7 +120,7 @@ impl Projectile {
         }
     }
 
-    fn first_tank_contact(&self, tanks: &[Option<Pose>; 2], delta: Vec2) -> Option<(usize, f64)> {
+    fn first_tank_contact(&self, tanks: &[Option<Pose>], delta: Vec2) -> Option<(usize, f64)> {
         tanks
             .iter()
             .enumerate()

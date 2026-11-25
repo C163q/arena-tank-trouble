@@ -131,8 +131,8 @@ impl Session {
         let view = self.game.view();
         if self.outcome == RoundOutcome::Running {
             match view.outcome {
-                RoundOutcome::TargetHit => self.target_hits += 1,
-                RoundOutcome::SelfHit => self.self_hits += 1,
+                RoundOutcome::Winner(0) => self.target_hits += 1,
+                RoundOutcome::Winner(1) => self.self_hits += 1,
                 _ => {}
             }
             self.outcome = view.outcome;
@@ -168,7 +168,12 @@ impl Session {
             "pickups": view.pickups,
             "laser_trails": view.laser_trails,
             "params": view.params,
-            "outcome": view.outcome,
+            "outcome": match view.outcome {
+                RoundOutcome::Running => "running",
+                RoundOutcome::Winner(0) => "target_hit",
+                RoundOutcome::Winner(_) => "self_hit",
+                RoundOutcome::Draw => "draw",
+            },
             "victory_at": view.victory_at,
             "target_hits": self.target_hits,
             "self_hits": self.self_hits,

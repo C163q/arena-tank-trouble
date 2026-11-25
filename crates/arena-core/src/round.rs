@@ -2,7 +2,7 @@ use rand::{Rng, SeedableRng};
 use rand_chacha::ChaCha8Rng;
 
 use crate::hull::OrientedBox;
-use crate::motion::drive_with_other;
+use crate::motion::drive_with_others;
 use crate::pickups::Pickups;
 use crate::projectile::{Impact, Projectile};
 use crate::{
@@ -23,8 +23,7 @@ const SHOTGUN_HALF_ANGLE: f64 = 20.0_f64.to_radians();
 #[cfg_attr(feature = "serde", serde(rename_all = "snake_case"))]
 pub enum RoundOutcome {
     Running,
-    TargetHit,
-    SelfHit,
+    Winner(usize),
     Draw,
 }
 
@@ -34,6 +33,7 @@ pub struct TankView {
     pub pose: Pose,
     pub alive: bool,
     pub ammo: u8,
+    pub refill_at: Option<u64>,
     pub laser_loaded: bool,
     pub next_shot: Option<PickupKind>,
 }
@@ -43,6 +43,9 @@ pub struct TankView {
 pub struct ProjectileView {
     pub position: Vec2,
     pub kind: ProjectileKind,
+    pub owner: usize,
+    pub velocity: Vec2,
+    pub wall_contacts: u8,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq)]
@@ -51,6 +54,14 @@ pub struct LaserTrail {
     pub start: Vec2,
     pub end: Vec2,
     pub expires_at: u64,
+    pub owner: usize,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[cfg_attr(feature = "serde", derive(serde::Serialize))]
+pub struct Elimination {
+    pub tank: usize,
+    pub owner: usize,
 }
 
 #[derive(Debug, PartialEq)]
@@ -59,12 +70,13 @@ pub struct RoundView<'a> {
     pub tick: u64,
     pub maze: &'a Maze,
     pub params: &'a Params,
-    pub tanks: [TankView; 2],
+    pub tanks: Vec<TankView>,
     pub projectiles: Vec<ProjectileView>,
     pub pickups: &'a [Pickup],
     pub laser_trails: &'a [LaserTrail],
     pub outcome: RoundOutcome,
     pub victory_at: Option<u64>,
+    pub eliminations: &'a [Elimination],
 }
 
 pub struct Round {
@@ -72,13 +84,14 @@ pub struct Round {
     tick: u64,
     maze: Maze,
     params: Params,
-    tanks: [Tank; 2],
+    tanks: Vec<Tank>,
     projectiles: Vec<Projectile>,
     pickups: Pickups,
     shotgun_rng: ChaCha8Rng,
     laser_trails: Vec<LaserTrail>,
     outcome: RoundOutcome,
     victory_at: Option<u64>,
+    eliminations: Vec<Elimination>,
     reload_ticks: u64,
     laser_trail_ticks: u64,
 }
@@ -127,60 +140,90 @@ impl Tank {
 
 impl Round {
     pub fn new(seed: u64, params: Params) -> Result<Self, &'static str> {
+        Self::with_players(seed, params, 2)
+    }
+
+    pub fn with_players(seed: u64, params: Params, players: usize) -> Result<Self, &'static str> {
         params.validate()?;
-        let (maze, spawns) = Maze::generate(seed);
+        if !(2..=4).contains(&players) {
+            return Err("players");
+        }
+        let (maze, spawns) = Maze::generate_for_players(seed, players);
         Ok(Self::from_maze(seed, params, maze, spawns))
     }
 
-    fn from_maze(seed: u64, params: Params, maze: Maze, spawns: [Pose; 2]) -> Self {
+    fn from_maze(
+        seed: u64,
+        params: Params,
+        maze: Maze,
+        spawns: impl IntoIterator<Item = Pose>,
+    ) -> Self {
         Self {
             seed,
             tick: 0,
             maze,
             params,
-            tanks: spawns.map(|pose| Tank {
-                pose,
-                alive: true,
-                ammo: MAGAZINE_CAPACITY,
-                refill_at: None,
-                next_shot: None,
-            }),
+            tanks: spawns
+                .into_iter()
+                .map(|pose| Tank {
+                    pose,
+                    alive: true,
+                    ammo: MAGAZINE_CAPACITY,
+                    refill_at: None,
+                    next_shot: None,
+                })
+                .collect(),
             projectiles: Vec::new(),
             pickups: Pickups::new(seed),
             shotgun_rng: ChaCha8Rng::seed_from_u64(seed ^ 0x94D0_49BB_1331_11EB),
             laser_trails: Vec::new(),
             outcome: RoundOutcome::Running,
             victory_at: None,
+            eliminations: Vec::new(),
             reload_ticks: interval_ticks(params.reload_secs),
             laser_trail_ticks: interval_ticks(params.laser_trail_secs),
         }
     }
 
-    pub fn step(&mut self, actions: [Action; 2]) {
+    /// Advance one simulation tick. Provide one action per starting seat.
+    ///
+    /// # Panics
+    ///
+    /// Panics if the number of actions differs from the round's seat count.
+    pub fn step(&mut self, actions: impl AsRef<[Action]>) {
+        let actions = actions.as_ref();
+        assert_eq!(actions.len(), self.tanks.len());
         if self.outcome != RoundOutcome::Running {
             return;
         }
         self.tick += 1;
+        self.eliminations.clear();
         self.laser_trails
             .retain(|trail| trail.expires_at > self.tick);
-        for (index, action) in actions.into_iter().enumerate() {
-            let other = self.tanks[1 - index].live_pose();
-            let tank = &mut self.tanks[index];
+        for (index, &action) in actions.iter().enumerate() {
+            let (before, from_here) = self.tanks.split_at_mut(index);
+            let (tank, after) = from_here.split_first_mut().expect("seat exists");
+            let others = before
+                .iter()
+                .chain(after.iter())
+                .filter_map(Tank::live_pose);
             if !tank.alive {
                 continue;
             }
             tank.refill(self.tick, self.reload_ticks);
-            tank.pose = drive_with_other(&self.maze, tank.pose, other, action, &self.params);
+            tank.pose = drive_with_others(&self.maze, tank.pose, others, action, &self.params);
         }
-        let poses = self.tanks.each_ref().map(Tank::live_pose);
-        for (tank, collected) in self.tanks.iter_mut().zip(self.pickups.collect(poses)) {
+        let poses: Vec<_> = self.tanks.iter().map(Tank::live_pose).collect();
+        for (tank, collected) in self.tanks.iter_mut().zip(self.pickups.collect(&poses)) {
             if let Some(kind) = collected {
                 tank.next_shot = Some(kind);
             }
         }
-        let mut hits = [false; 2];
+        let mut hits = vec![None; self.tanks.len()];
         let expires_at = self.tick + self.laser_trail_ticks;
+        let projectile_step = self.shell_speed() / f64::from(TICKS_PER_SECOND);
         let mut advance = |bullet: &mut Projectile, distance, in_barrel: bool| {
+            let owner = bullet.owner;
             let laser = bullet.kind == ProjectileKind::Laser;
             let contact_limit = if laser {
                 LASER_WALL_CONTACTS
@@ -193,19 +236,20 @@ impl Round {
                         start: segment.start,
                         end: segment.end,
                         expires_at,
+                        owner,
                     });
                 }
             });
             match impact {
                 None => true,
                 Some(Impact::Tank(index)) => {
-                    hits[index] = true;
+                    hits[index].get_or_insert(owner);
                     false
                 }
                 Some(Impact::Expired) => false,
             }
         };
-        for (index, action) in actions.into_iter().enumerate() {
+        for (index, &action) in actions.iter().enumerate() {
             let tank = &mut self.tanks[index];
             if !action.fire || !tank.alive {
                 continue;
@@ -237,8 +281,6 @@ impl Round {
                 self.projectiles.push(bullet);
             }
         }
-        let projectile_step =
-            PROJECTILE_SPEED_RATIO / self.params.forward_secs / f64::from(TICKS_PER_SECOND);
         self.projectiles.retain_mut(|bullet| {
             let distance = if bullet.kind == ProjectileKind::Laser {
                 projectile_step * LASER_SPEED_MULTIPLIER
@@ -247,38 +289,48 @@ impl Round {
             };
             advance(bullet, distance, false)
         });
-        // Include new segments: their final point can touch both tanks at once.
-        for ((tank, pose), hit) in self.tanks.iter_mut().zip(poses).zip(hits) {
+        // Include new segments: their final point can touch multiple tanks at once.
+        for (index, ((tank, pose), hit)) in self.tanks.iter_mut().zip(poses).zip(hits).enumerate() {
             let Some(pose) = pose else { continue };
-            let hull = OrientedBox::tank(pose);
-            tank.alive = !hit
-                && !self.laser_trails.iter().any(|trail| {
-                    hull.disc_contact(trail.start, trail.end - trail.start, LASER_RADIUS)
-                        .is_some()
-                });
+            let owner = hit.or_else(|| {
+                let hull = OrientedBox::tank(pose);
+                self.laser_trails
+                    .iter()
+                    .find(|trail| {
+                        hull.disc_contact(trail.start, trail.end - trail.start, LASER_RADIUS)
+                            .is_some()
+                    })
+                    .map(|trail| trail.owner)
+            });
+            if let Some(owner) = owner {
+                tank.alive = false;
+                self.eliminations.push(Elimination { tank: index, owner });
+            }
         }
-        let poses = self.tanks.each_ref().map(Tank::live_pose);
-        match poses {
-            [None, None] => self.outcome = RoundOutcome::Draw,
-            [Some(_), Some(_)] => {}
-            _ => {
+
+        let mut alive = self.tanks.iter().enumerate().filter(|(_, tank)| tank.alive);
+        match (alive.next(), alive.next()) {
+            (None, _) => self.outcome = RoundOutcome::Draw,
+            (Some((seat, _)), None) => {
                 let deadline = self
                     .victory_at
                     .get_or_insert(self.tick + VICTORY_DELAY_TICKS);
                 if self.tick == *deadline {
-                    self.outcome = if self.tanks[0].alive {
-                        RoundOutcome::TargetHit
-                    } else {
-                        RoundOutcome::SelfHit
-                    };
+                    self.outcome = RoundOutcome::Winner(seat);
                 }
             }
+            _ => {}
         }
         if self.outcome == RoundOutcome::Running {
-            self.pickups.spawn_due(self.tick, &self.maze, poses);
+            let poses: Vec<_> = self.tanks.iter().map(Tank::live_pose).collect();
+            self.pickups.spawn_due(self.tick, &self.maze, &poses);
         } else {
             self.victory_at = None;
         }
+    }
+
+    fn shell_speed(&self) -> f64 {
+        PROJECTILE_SPEED_RATIO / self.params.forward_secs
     }
 
     pub fn view(&self) -> RoundView<'_> {
@@ -287,28 +339,38 @@ impl Round {
             tick: self.tick,
             maze: &self.maze,
             params: &self.params,
-            tanks: std::array::from_fn(|index| {
-                let tank = &self.tanks[index];
-                TankView {
+            tanks: self
+                .tanks
+                .iter()
+                .map(|tank| TankView {
                     pose: tank.pose,
                     alive: tank.alive,
                     ammo: tank.ammo,
+                    refill_at: tank.refill_at,
                     laser_loaded: tank.next_shot == Some(PickupKind::Laser),
                     next_shot: tank.next_shot,
-                }
-            }),
+                })
+                .collect(),
             projectiles: self
                 .projectiles
                 .iter()
                 .map(|bullet| ProjectileView {
                     position: bullet.position,
                     kind: bullet.kind,
+                    owner: bullet.owner,
+                    velocity: bullet.velocity(if bullet.kind == ProjectileKind::Laser {
+                        self.shell_speed() * LASER_SPEED_MULTIPLIER
+                    } else {
+                        self.shell_speed()
+                    }),
+                    wall_contacts: bullet.contacts,
                 })
                 .collect(),
             pickups: self.pickups.items(),
             laser_trails: &self.laser_trails,
             outcome: self.outcome,
             victory_at: self.victory_at,
+            eliminations: &self.eliminations,
         }
     }
 }
@@ -784,6 +846,13 @@ mod tests {
         idle(&mut round, 1);
         assert_eq!(round.view().outcome, RoundOutcome::Draw);
         assert!(round.view().projectiles.is_empty());
+        assert_eq!(
+            round.view().eliminations,
+            [
+                Elimination { tank: 0, owner: 0 },
+                Elimination { tank: 1, owner: 0 }
+            ]
+        );
     }
 
     #[test]
@@ -813,8 +882,15 @@ mod tests {
         }
         drives_into_own_trail.step([forward, Action::default()]);
         assert!(!drives_into_own_trail.view().tanks[0].alive);
+        assert_eq!(
+            drives_into_own_trail.view().eliminations,
+            [Elimination { tank: 0, owner: 0 }]
+        );
         idle(&mut drives_into_own_trail, 120);
-        assert_eq!(drives_into_own_trail.view().outcome, RoundOutcome::SelfHit);
+        assert_eq!(
+            drives_into_own_trail.view().outcome,
+            RoundOutcome::Winner(1)
+        );
 
         for (seconds, ticks) in [(0.2, 12), (0.5, 30)] {
             let mut expires = make_round(seconds);
@@ -973,7 +1049,7 @@ mod tests {
         assert_eq!(round.view().tick, death_tick + 119);
         assert_eq!(round.view().outcome, RoundOutcome::Running);
         idle(&mut round, 1);
-        assert_eq!(round.view().outcome, RoundOutcome::TargetHit);
+        assert_eq!(round.view().outcome, RoundOutcome::Winner(0));
         assert_eq!(round.view().victory_at, None);
         idle(&mut round, 1);
         assert_eq!(round.view().tick, death_tick + 120);
@@ -1000,6 +1076,57 @@ mod tests {
             assert_eq!(round.view().outcome, RoundOutcome::Draw);
             assert_eq!(round.view().tick, hit_tick as u64);
         }
+    }
+
+    #[test]
+    fn four_seats_play_until_only_one_remains() {
+        let mut round = Round::with_players(42, Params::default(), 4).unwrap();
+        let start = round.view().tanks;
+        assert_eq!(start.len(), 4);
+        let mut actions = [Action::default(); 4];
+        actions[3].fire = true;
+        round.step(actions);
+        assert_eq!(round.view().tanks[3].ammo, 4);
+        assert!(round.view().tanks[..3].iter().all(|tank| tank.ammo == 5));
+
+        round.projectiles.clear();
+        round.maze.walls.clear();
+        for (index, tank) in round.tanks.iter_mut().enumerate() {
+            tank.pose = pose(2.0, 1.0 + index as f64, 0.0);
+        }
+        let shoot = |round: &mut Round, owner, y| {
+            round.projectiles.push(Projectile::new(
+                owner,
+                pose(1.72, y, 0.0),
+                ProjectileKind::Shell,
+            ));
+        };
+        shoot(&mut round, 3, 1.0);
+        round.step([Action::default(); 4]);
+        assert_eq!(
+            round.view().eliminations,
+            [Elimination { tank: 0, owner: 3 }]
+        );
+        assert_eq!(round.view().victory_at, None);
+        shoot(&mut round, 3, 2.0);
+        shoot(&mut round, 3, 3.0);
+        round.step([Action::default(); 4]);
+        let view = round.view();
+        let deadline = view.tick + 120;
+        assert_eq!(view.victory_at, Some(deadline));
+        assert_eq!(
+            view.eliminations,
+            [
+                Elimination { tank: 1, owner: 3 },
+                Elimination { tank: 2, owner: 3 }
+            ]
+        );
+        for _ in 0..120 {
+            round.step([Action::default(); 4]);
+        }
+        assert!(round.view().eliminations.is_empty());
+        assert_eq!(round.view().outcome, RoundOutcome::Winner(3));
+        assert_eq!(round.view().tick, deadline);
     }
 
     #[test]

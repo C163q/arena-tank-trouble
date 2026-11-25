@@ -71,6 +71,11 @@ pub struct Maze {
 
 impl Maze {
     pub fn generate(seed: u64) -> (Self, [Pose; 2]) {
+        let (maze, spawns) = Self::generate_for_players(seed, 2);
+        (maze, spawns.try_into().expect("two spawns"))
+    }
+
+    pub(super) fn generate_for_players(seed: u64, players: usize) -> (Self, Vec<Pose>) {
         let mut rng = ChaCha8Rng::seed_from_u64(seed);
         let mut open = std::collections::BTreeSet::new();
         let mut visited = [false; CELLS];
@@ -105,10 +110,23 @@ impl Maze {
         let distances = cell_distances(start, |edge| open.contains(&edge));
         let targets: Vec<_> = (0..CELLS).filter(|&cell| distances[cell] >= 4).collect();
         let target = *targets.choose(&mut rng).expect("maze has distant cells");
-        let spawns = [start, target].map(|cell| Pose {
+        let spawn = |cell, rng: &mut ChaCha8Rng| Pose {
             position: Vec2::new((cell % WIDTH) as f64 + 0.5, (cell / WIDTH) as f64 + 0.5),
             angle: f64::from(rng.gen_range(0..4)) * FRAC_PI_2,
-        });
+        };
+        let mut spawns = vec![spawn(start, &mut rng), spawn(target, &mut rng)];
+        let mut distances_from_spawns = vec![
+            distances,
+            cell_distances(target, |edge| open.contains(&edge)),
+        ];
+        while spawns.len() < players {
+            let candidates: Vec<_> = (0..CELLS)
+                .filter(|&cell| distances_from_spawns.iter().all(|d| d[cell] >= 4))
+                .collect();
+            let cell = *candidates.choose(&mut rng).expect("maze has distant cells");
+            spawns.push(spawn(cell, &mut rng));
+            distances_from_spawns.push(cell_distances(cell, |edge| open.contains(&edge)));
+        }
         let walls = all_edges
             .into_iter()
             .filter(|edge| !open.contains(edge))
@@ -133,6 +151,27 @@ mod tests {
     use std::collections::{HashMap, VecDeque};
 
     use super::*;
+
+    #[test]
+    fn extra_seats_preserve_the_map_and_existing_spawns() {
+        for seed in 0..32 {
+            let (first, pair) = Maze::generate(seed);
+            let (second, trio) = Maze::generate_for_players(seed, 3);
+            let (third, full) = Maze::generate_for_players(seed, 4);
+            assert_eq!(first, second);
+            assert_eq!(second, third);
+            assert_eq!(pair, trio[..2]);
+            assert_eq!(trio, full[..3]);
+            assert_eq!(full, Maze::generate_for_players(seed, 4).1);
+            for (index, spawn) in full.iter().enumerate() {
+                assert!(
+                    full[..index]
+                        .iter()
+                        .all(|other| other.position != spawn.position)
+                );
+            }
+        }
+    }
 
     #[test]
     fn seed_reproduces_connected_maze() {

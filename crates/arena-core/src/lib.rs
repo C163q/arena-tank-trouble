@@ -11,7 +11,9 @@ pub use motion::{Action, Params, drive};
 pub use pickups::PICKUP_SIZE as LASER_PICKUP_SIZE;
 pub use pickups::{PICKUP_SIZE, Pickup, PickupKind};
 pub use projectile::ProjectileKind;
-pub use round::{LaserTrail, ProjectileView, Round, RoundOutcome, RoundView, TankView};
+pub use round::{
+    Elimination, LaserTrail, ProjectileView, Round, RoundOutcome, RoundView, TankView,
+};
 
 pub const TICKS_PER_SECOND: u32 = 60;
 pub const WALL_THICKNESS: f64 = 0.08;

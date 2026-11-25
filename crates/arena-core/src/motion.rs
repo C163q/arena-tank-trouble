@@ -5,6 +5,7 @@ use crate::hull::OrientedBox;
 use crate::{Maze, Pose, TANK_LENGTH, TANK_WIDTH, TICKS_PER_SECOND, Vec2};
 
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+#[cfg_attr(feature = "serde", derive(serde::Serialize))]
 pub struct Action {
     pub forward: bool,
     pub reverse: bool,
@@ -63,13 +64,13 @@ impl Params {
 }
 
 pub fn drive(maze: &Maze, pose: Pose, other: Pose, action: Action, params: &Params) -> Pose {
-    drive_with_other(maze, pose, Some(other), action, params)
+    drive_with_others(maze, pose, [other], action, params)
 }
 
-pub(super) fn drive_with_other(
+pub(super) fn drive_with_others(
     maze: &Maze,
     mut pose: Pose,
-    other: Option<Pose>,
+    others: impl IntoIterator<Item = Pose>,
     action: Action,
     params: &Params,
 ) -> Pose {
@@ -93,12 +94,15 @@ pub(super) fn drive_with_other(
         .filter(|bounds| bounds.near(pose.position, reach))
         .map(OrientedBox::axis_aligned)
         .collect();
-    if let Some(other) = other.filter(|other| {
-        let separation = other.position - pose.position;
-        separation.dot(separation) <= (reach + hull_radius).powi(2)
-    }) {
-        obstacles.push(OrientedBox::tank(other));
-    }
+    obstacles.extend(
+        others
+            .into_iter()
+            .filter(|other| {
+                let separation = other.position - pose.position;
+                separation.dot(separation) <= (reach + hull_radius).powi(2)
+            })
+            .map(OrientedBox::tank),
+    );
 
     if turn != 0.0 {
         let change = turn * TAU / (params.turn_secs * f64::from(TICKS_PER_SECOND));

@@ -41,9 +41,12 @@ impl Pickups {
         }
     }
 
-    pub fn collect(&mut self, poses: [Option<Pose>; 2]) -> [Option<PickupKind>; 2] {
-        let tanks = poses.map(|pose| pose.map(|pose| (pose.position, OrientedBox::tank(pose))));
-        let mut collected = [None; 2];
+    pub fn collect(&mut self, poses: &[Option<Pose>]) -> Vec<Option<PickupKind>> {
+        let tanks: Vec<_> = poses
+            .iter()
+            .map(|pose| pose.map(|pose| (pose.position, OrientedBox::tank(pose))))
+            .collect();
+        let mut collected = vec![None; poses.len()];
         self.items.retain(|&Pickup { position, kind }| {
             let square = pickup_square(position);
             let winner = tanks
@@ -63,7 +66,7 @@ impl Pickups {
         collected
     }
 
-    pub fn spawn_due(&mut self, tick: u64, maze: &Maze, poses: [Option<Pose>; 2]) {
+    pub fn spawn_due(&mut self, tick: u64, maze: &Maze, poses: &[Option<Pose>]) {
         let due = tick
             .checked_sub(FIRST_SPAWN)
             .is_some_and(|elapsed| elapsed.is_multiple_of(SPAWN_INTERVAL));
@@ -71,7 +74,12 @@ impl Pickups {
         if !due || free_slots == 0 {
             return;
         }
-        let hulls = poses.map(|pose| pose.map(OrientedBox::tank));
+        let hulls: Vec<_> = poses
+            .iter()
+            .flatten()
+            .copied()
+            .map(OrientedBox::tank)
+            .collect();
         let available: Vec<_> = (0..maze.height)
             .flat_map(|y| {
                 (0..maze.width).map(move |x| Vec2::new(f64::from(x) + 0.5, f64::from(y) + 0.5))
@@ -80,7 +88,6 @@ impl Pickups {
                 !self.items.iter().any(|item| item.position == position)
                     && hulls
                         .iter()
-                        .flatten()
                         .all(|hull| !hull.overlaps(pickup_square(position)))
             })
             .collect();
@@ -130,10 +137,10 @@ mod tests {
         let (maze, poses) = Maze::generate(42);
         let mut first = Pickups::new(42);
         let mut replay = Pickups::new(42);
-        first.spawn_due(899, &maze, poses.map(Some));
+        first.spawn_due(899, &maze, &poses.map(Some));
         assert!(first.items().is_empty());
-        first.spawn_due(900, &maze, poses.map(Some));
-        replay.spawn_due(900, &maze, poses.map(Some));
+        first.spawn_due(900, &maze, &poses.map(Some));
+        replay.spawn_due(900, &maze, &poses.map(Some));
         assert!((1..=2).contains(&first.items().len()));
         assert_eq!(first.items(), replay.items());
         for (index, item) in first.items().iter().enumerate() {
@@ -155,14 +162,14 @@ mod tests {
                 kind: PickupKind::Laser,
             })
             .collect();
-        capped.spawn_due(900, &maze, poses.map(Some));
+        capped.spawn_due(900, &maze, &poses.map(Some));
         assert_eq!(capped.items().len(), 5);
-        capped.spawn_due(1500, &maze, poses.map(Some));
+        capped.spawn_due(1500, &maze, &poses.map(Some));
         assert_eq!(capped.items().len(), 5);
         capped.items.truncate(3);
-        capped.spawn_due(1501, &maze, poses.map(Some));
+        capped.spawn_due(1501, &maze, &poses.map(Some));
         assert_eq!(capped.items().len(), 3);
-        capped.spawn_due(2100, &maze, poses.map(Some));
+        capped.spawn_due(2100, &maze, &poses.map(Some));
         assert!((4..=5).contains(&capped.items().len()));
     }
 
@@ -172,7 +179,7 @@ mod tests {
         let mut items = Pickups::new(42);
         let mut last_count = 0;
         for tick in [900, 1500, 2100, 2700, 3300] {
-            items.spawn_due(tick, &maze, poses.map(Some));
+            items.spawn_due(tick, &maze, &poses.map(Some));
             let total = items.items().len();
             assert!(total <= 5);
             assert!((last_count..=last_count + 2).contains(&total));
@@ -210,24 +217,24 @@ mod tests {
         for (x, angle) in [(2.13, 0.0), (2.34 - (0.21 + 0.17) / SQRT_2, FRAC_PI_4)] {
             pickups.items.push(item);
             assert_eq!(
-                pickups.collect([pose(x, 2.5, angle), far].map(Some)),
+                pickups.collect(&[pose(x, 2.5, angle), far].map(Some)),
                 [None, None]
             );
             assert_eq!(pickups.items(), [item]);
             assert_eq!(
-                pickups.collect([pose(x + 0.01, 2.5, angle), far].map(Some)),
+                pickups.collect(&[pose(x + 0.01, 2.5, angle), far].map(Some)),
                 [Some(PickupKind::Shotgun), None]
             );
             assert!(pickups.items().is_empty());
         }
         pickups.items.push(item);
         assert_eq!(
-            pickups.collect([pose(2.16, 2.5, 0.0), pose(2.81, 2.5, 0.0)].map(Some)),
+            pickups.collect(&[pose(2.16, 2.5, 0.0), pose(2.81, 2.5, 0.0)].map(Some)),
             [None, Some(PickupKind::Shotgun)]
         );
         pickups.items.push(item);
         assert_eq!(
-            pickups.collect([pose(2.1875, 2.5, 0.0), pose(2.8125, 2.5, 0.0)].map(Some)),
+            pickups.collect(&[pose(2.1875, 2.5, 0.0), pose(2.8125, 2.5, 0.0)].map(Some)),
             [Some(PickupKind::Shotgun), None]
         );
     }
