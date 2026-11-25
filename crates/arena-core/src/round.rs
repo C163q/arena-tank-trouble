@@ -144,13 +144,7 @@ impl Round {
         for (tank, collected) in self.tanks.iter_mut().zip(self.pickups.collect(poses)) {
             tank.laser_loaded |= collected;
         }
-        let mut hits = poses.map(|pose| {
-            let hull = OrientedBox::tank(pose);
-            self.laser_trails.iter().any(|trail| {
-                hull.disc_contact(trail.start, trail.end - trail.start, PROJECTILE_RADIUS)
-                    .is_some()
-            })
-        });
+        let mut hits = [false; 2];
         let expires_at = self.tick + self.laser_trail_ticks;
         let mut advance = |bullet: &mut Projectile, distance, in_barrel: bool| {
             let laser = bullet.kind == ProjectileKind::Laser;
@@ -196,6 +190,15 @@ impl Round {
             };
             advance(bullet, distance, false)
         });
+        // Include new segments: their final point can touch both tanks at once.
+        for (hit, pose) in hits.iter_mut().zip(poses) {
+            let hull = OrientedBox::tank(pose);
+            *hit = *hit
+                || self.laser_trails.iter().any(|trail| {
+                    hull.disc_contact(trail.start, trail.end - trail.start, PROJECTILE_RADIUS)
+                        .is_some()
+                });
+        }
         self.outcome = match hits {
             [false, false] => RoundOutcome::Running,
             [false, true] => RoundOutcome::TargetHit,
@@ -460,6 +463,26 @@ mod tests {
         assert_eq!(view.outcome, RoundOutcome::TargetHit);
         assert!(view.projectiles.is_empty());
         assert!((view.laser_trails.last().unwrap().end.x - 1.608).abs() < 1e-9);
+    }
+
+    #[test]
+    fn laser_contact_can_end_in_a_draw() {
+        let mut round = fixture(
+            vec![wall((1.0, 0.0), (1.0, 3.0))],
+            pose(2.0, 1.32, 0.0),
+            pose(2.0, 1.68, 0.0),
+            Params::default(),
+        );
+        round.projectiles.push(Projectile::new(
+            0,
+            pose(1.4, 1.5, PI),
+            ProjectileKind::Laser,
+        ));
+        idle(&mut round, 5);
+        assert_eq!(round.view().outcome, RoundOutcome::Running);
+        idle(&mut round, 1);
+        assert_eq!(round.view().outcome, RoundOutcome::Draw);
+        assert!(round.view().projectiles.is_empty());
     }
 
     #[test]
