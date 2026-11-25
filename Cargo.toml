@@ -1,3 +1,8 @@
 [workspace]
-members = ["crates/arena-core", "crates/arena-playtest", "crates/arena-runner"]
+members = [
+    "crates/arena-baseline-bot",
+    "crates/arena-core",
+    "crates/arena-playtest",
+    "crates/arena-runner",
+]
 resolver = "3"

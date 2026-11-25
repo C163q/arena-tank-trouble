@@ -5,10 +5,12 @@
 ## Bot 对战
 
 ```sh
-cargo run --locked -p arena-runner -- --seed 407 --out .tmp/my-match demo demo demo demo
+cargo build --locked --release -p arena-runner -p arena-baseline-bot
+target/release/arena-runner --seed 407 --out runs/my-match \
+  ./target/release/libarena_baseline_bot.so demo
 ```
 
-比赛结束后可直接打开对局目录里的 `replay.html`。项目根目录的通用播放器支持拖入 `replay.json` 或 `timeline.jsonl`。Linux 下可以把 `demo` 换成 bot 动态库。[打开通用播放器](viewer.html) · [Bot 对战、接口与回放](docs/development/bot-match.md)
+上例在 Linux 上运行基准 Bot 与内置示例的对局。可换入自己的 Bot 动态库。比赛结束后直接打开对局目录中的 `replay.html`，也可将 `replay.json` 或 `timeline.jsonl` 拖进通用播放器。[打开通用播放器](viewer.html) · [Bot 对战、接口与回放](docs/development/bot-match.md)
 
 批量对比可配置局数与并行数，输出排行榜和各局回放。用法见 [多局 Bot 测评](docs/development/league.md)。
 

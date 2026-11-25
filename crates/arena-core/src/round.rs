@@ -28,7 +28,7 @@ pub enum RoundOutcome {
 }
 
 #[derive(Clone, Copy, Debug, PartialEq)]
-#[cfg_attr(feature = "serde", derive(serde::Serialize))]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 pub struct TankView {
     pub pose: Pose,
     pub alive: bool,
@@ -39,7 +39,7 @@ pub struct TankView {
 }
 
 #[derive(Clone, Copy, Debug, PartialEq)]
-#[cfg_attr(feature = "serde", derive(serde::Serialize))]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 pub struct ProjectileView {
     pub position: Vec2,
     pub kind: ProjectileKind,

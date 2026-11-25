@@ -12,6 +12,16 @@ cargo run --locked -p arena-runner -- --seed 407 --out .tmp/my-match demo demo d
 
 只剩一辆坦克时继续模拟 120 步，撑到结算的坦克获胜。全灭则平局。裁判默认模拟到 3600 步，若已进入胜负等待则完成剩余结算步。仍有多辆坦克时到达步数上限，计时平局。可以用 `--max-ticks` 调整上限。击杀分给原发射席位，自杀零分。存活分只给最终胜者。击杀默认 1 分，最终存活默认 2 分，分别用 `--kill-points` 和 `--survival-points` 调整。
 
+## 基准 Bot
+
+基准 Bot 是通过公开 C ABI 加载的 Rust 动态库，各席位执行相同的确定性策略。可见敌人进入射程时瞄准并间隔开火，平时沿迷宫格子的最短路径追击，未装填道具时会绕去拾取较近的道具。它用延迟观测中的弹丸位置和速度预估短时间内的直线路径，比较前进、后退和停下的避弹空间。预测到首面墙为止。
+
+在 Linux 上构建后，把 `./target/release/libarena_baseline_bot.so` 当作普通 Bot 路径传给裁判或测评脚本。[基准 Bot 源码](../../crates/arena-baseline-bot/src/lib.rs) · [批量测评示例](league.md#与基准-bot-对比)
+
+```sh
+cargo build --locked --release -p arena-runner -p arena-baseline-bot
+```
+
 ## 逐步文本与通用播放器
 
 `replay.json` 将全局和每帧数据放在一个 JSON 对象中，各字段使用完整名称，适合程序直接读取。`timeline.jsonl` 从同一份裁判帧导出，为逐行查看和 AI 分析压缩了重复字段。两种文件使用相同的裁判帧和结算结果。

@@ -24,7 +24,7 @@ pub const PROJECTILE_RADIUS: f64 = 0.042;
 pub const LASER_RADIUS: f64 = 0.030;
 
 #[derive(Clone, Copy, Debug, PartialEq)]
-#[cfg_attr(feature = "serde", derive(serde::Serialize))]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 pub struct Vec2 {
     pub x: f64,
     pub y: f64,
@@ -37,16 +37,16 @@ impl Vec2 {
 }
 
 impl Vec2 {
-    fn from_angle(angle: f64) -> Self {
+    pub fn from_angle(angle: f64) -> Self {
         let (y, x) = angle.sin_cos();
         Self::new(x, y)
     }
 
-    fn scale(self, factor: f64) -> Self {
+    pub fn scale(self, factor: f64) -> Self {
         Self::new(self.x * factor, self.y * factor)
     }
 
-    fn dot(self, other: Self) -> f64 {
+    pub fn dot(self, other: Self) -> f64 {
         self.x * other.x + self.y * other.y
     }
 }

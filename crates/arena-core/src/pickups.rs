@@ -11,7 +11,7 @@ const SPAWN_INTERVAL: u64 = 10 * TICKS_PER_SECOND as u64;
 const LIMIT: usize = 5;
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
-#[cfg_attr(feature = "serde", derive(serde::Serialize))]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 #[cfg_attr(feature = "serde", serde(rename_all = "snake_case"))]
 pub enum PickupKind {
     Laser,
@@ -19,7 +19,7 @@ pub enum PickupKind {
 }
 
 #[derive(Clone, Copy, Debug, PartialEq)]
-#[cfg_attr(feature = "serde", derive(serde::Serialize))]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 pub struct Pickup {
     #[cfg_attr(feature = "serde", serde(flatten))]
     pub position: Vec2,

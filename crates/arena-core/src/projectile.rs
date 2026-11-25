@@ -3,7 +3,7 @@ use crate::hull::OrientedBox;
 use crate::{LASER_RADIUS, Maze, PROJECTILE_RADIUS, Pose, Vec2};
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
-#[cfg_attr(feature = "serde", derive(serde::Serialize))]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 #[cfg_attr(feature = "serde", serde(rename_all = "snake_case"))]
 pub enum ProjectileKind {
     Shell,
@@ -11,7 +11,7 @@ pub enum ProjectileKind {
 }
 
 impl ProjectileKind {
-    fn radius(self) -> f64 {
+    pub fn radius(self) -> f64 {
         match self {
             Self::Shell => PROJECTILE_RADIUS,
             Self::Laser => LASER_RADIUS,

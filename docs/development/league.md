@@ -22,6 +22,17 @@ python3 scripts/league.py --matches 12 --jobs 2 --players 3 --seed 407 \
 
 并行会让各局共享机器资源，决策超时可能随负载变化。比较不同测评结果时，报告中的并行数也是运行条件。
 
+## 与基准 Bot 对比
+
+在 Linux 上构建发布版裁判和基准库后，用库路径安排换位赛。示例中的 `demo` 可以换成待测 Bot 的动态库。[基准策略](bot-match.md#基准-bot)
+
+```sh
+cargo build --locked --release -p arena-runner -p arena-baseline-bot
+python3 scripts/league.py --runner target/release/arena-runner \
+  --matches 12 --jobs 2 --players 2 --seed 407 --out runs/baseline-league \
+  ./target/release/libarena_baseline_bot.so demo
+```
+
 ## 输出与排行榜
 
 `--out` 指向尚未存在的目录。完成后打开其中的 `summary.md` 查看排行和各局回放链接。对应的 `summary.json` 包含赛程编号、实际结果、分项积分和文件路径。`plan.json` 记录赛程与输入文件的 SHA-256。每局使用期初指定的库路径。

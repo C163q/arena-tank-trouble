@@ -49,20 +49,21 @@ fn cell_distances(start: usize, is_open: impl Fn(Edge) -> bool) -> [usize; CELLS
 }
 
 #[derive(Clone, Copy, Debug, PartialEq)]
-#[cfg_attr(feature = "serde", derive(serde::Serialize))]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 pub struct Pose {
     pub position: Vec2,
     pub angle: f64,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq)]
-#[cfg_attr(feature = "serde", derive(serde::Serialize))]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 pub struct Wall {
     pub a: Vec2,
     pub b: Vec2,
 }
 
 #[derive(Clone, Debug, PartialEq)]
+#[cfg_attr(feature = "serde", derive(serde::Deserialize))]
 pub struct Maze {
     pub width: u8,
     pub height: u8,
@@ -70,6 +71,11 @@ pub struct Maze {
 }
 
 impl Maze {
+    /// First wall contact on a circular sweep, as a fraction of the segment.
+    pub fn first_wall_contact(&self, from: Vec2, to: Vec2, radius: f64) -> Option<f64> {
+        crate::collision::sweep_maze(self, from, to - from, radius).map(|hit| hit.time)
+    }
+
     pub fn generate(seed: u64) -> (Self, [Pose; 2]) {
         let (maze, spawns) = Self::generate_for_players(seed, 2);
         (maze, spawns.try_into().expect("two spawns"))
