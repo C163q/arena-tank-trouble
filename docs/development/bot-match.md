@@ -26,6 +26,8 @@ cargo run --locked -p arena-runner -- --seed 407 --out .tmp/my-match demo demo d
 cargo run --locked -p arena-runner -- viewer --out runs/viewer.html
 ```
 
+裁判将绘图代码和导入逻辑嵌入[回放源码模板](../../crates/arena-runner/web/replay.html)，生成可离线打开的 HTML。
+
 用浏览器直接打开生成的 HTML，从文件管理器把 `replay.json` 或 `timeline.jsonl` 拖到页面任意位置，也可点击「选择文件」。播放器从第 0 步开始显示所选对局，并保留原先打开的回放直到新文件通过校验。
 
 ## 编写 C ABI bot

@@ -56,7 +56,16 @@ fn write_page(mut file: impl Write, embedded_replay: Option<&[u8]>) -> io::Resul
     let (head, tail) = PAGE
         .split_once("<!-- REPLAY_SCRIPT -->")
         .expect("script marker");
-    write!(file, "{head}")?;
+    let (before_status, template_status) = head
+        .split_once("<!-- REPLAY_STATUS -->")
+        .expect("status marker");
+    let (_, after_status) = template_status
+        .split_once("<!-- REPLAY_STATUS -->")
+        .expect("end status marker");
+    write!(
+        file,
+        "{before_status}正在启动播放器。如果此提示一直存在，请在浏览器中直接打开此 HTML 文件。{after_status}"
+    )?;
     if let Some(encoded) = embedded_replay {
         write!(
             file,
