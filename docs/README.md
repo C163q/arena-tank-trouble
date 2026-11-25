@@ -4,6 +4,8 @@
 
 ## 常用文档
 
+- [本地试玩与项目定位](../README.md)面向玩家，说明启动方式和基本操作。
+- [静止靶试玩版开发与验证](development/playtest.md)说明代码入口和验证流程。
 - [项目协作约定](../AGENTS.md)说明项目目标，以及开发代理开始工作时应阅读的材料。
 - [文档编写与维护规范](documentation.md)规定文档的读者、命名、阅读范围和维护责任。
 - [Codex 环境约定](ai/codex.md)说明沙箱内的命令执行与审批要求。选择子代理模型时，参阅 [Codex 模型选择](ai/codex-subagent-model-selection.md)或 [Cursor 模型选择](ai/cursor-model-selection.md)。

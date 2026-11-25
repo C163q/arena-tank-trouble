@@ -1,0 +1,78 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>坦克竞技场 · 静止靶练习</title>
+  <link rel="stylesheet" href="/style.css">
+  <script type="module" src="/app.js"></script>
+</head>
+<body>
+  <main class="shell">
+    <header class="masthead">
+      <div>
+        <p class="project-name">坦克竞技场</p>
+        <h1>静止靶练习</h1>
+      </div>
+      <div id="connection-status" class="connection" role="status">正在连接</div>
+    </header>
+    <div class="layout">
+      <section class="arena" aria-label="练习场">
+        <div class="board">
+          <canvas tabindex="0" aria-label="当前迷宫和坦克位置"></canvas>
+        </div>
+        <div class="hud">
+          <div class="magazine">
+            <span class="chip player" aria-hidden="true"></span>
+            <strong>弹匣</strong>
+            <div id="ammo" class="ammo" role="img" aria-label="弹量">
+              <span></span><span></span><span></span><span></span><span></span>
+            </div>
+          </div>
+          <div class="scores">
+            <span class="chip target" aria-hidden="true"></span>
+            <span>命中靶 <strong id="target-hits">0</strong></span>
+            <span>自伤 <strong id="self-hits">0</strong></span>
+          </div>
+        </div>
+        <div class="round-info">
+          <strong id="outcome" role="status">等待开局</strong>
+          <label>种子 <output id="seed">—</output></label>
+        </div>
+      </section>
+      <aside class="controls" aria-label="练习设置">
+        <section class="card">
+          <h2>操作</h2>
+          <dl class="keys">
+            <div><dt><kbd>W</kbd><kbd>S</kbd></dt><dd>前进 / 后退</dd></div>
+            <div><dt><kbd>A</kbd><kbd>D</kbd></dt><dd>左转 / 右转</dd></div>
+            <div><dt><kbd>空格</kbd></dt><dd>开火</dd></div>
+          </dl>
+        </section>
+        <section class="card settings">
+          <h2>试玩参数</h2>
+          <form id="parameters">
+            <label for="forward_secs">前进一格</label>
+            <div class="field"><input id="forward_secs" type="number" min="0.15" max="3" step="0.01" required><span>秒</span></div>
+            <label for="reverse_secs">后退一格</label>
+            <div class="field"><input id="reverse_secs" type="number" min="0.15" max="3" step="0.01" required><span>秒</span></div>
+            <label for="turn_secs">转向一圈</label>
+            <div class="field"><input id="turn_secs" type="number" min="0.25" max="6" step="0.01" required><span>秒</span></div>
+            <label for="reload_secs">补弹间隔</label>
+            <div class="field"><input id="reload_secs" type="number" min="0.2" max="10" step="0.01" required><span>秒</span></div>
+            <label for="wall_contacts">触墙上限</label>
+            <div class="field"><input id="wall_contacts" type="number" min="1" max="20" step="1" required><span>次</span></div>
+          </form>
+          <p class="parameter-note">调整后重开生效</p>
+          <div class="buttons">
+            <button id="restart-same" type="button" disabled>同图重开</button>
+            <button id="restart-new" type="button" disabled>换图重开</button>
+          </div>
+          <button id="reconnect" type="button" hidden>重新连接</button>
+          <p id="error" role="alert" hidden></p>
+        </section>
+      </aside>
+    </div>
+  </main>
+</body>
+</html>

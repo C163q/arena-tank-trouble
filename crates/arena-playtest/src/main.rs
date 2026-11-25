@@ -6,6 +6,7 @@ use std::time::Duration;
 use arena_core::TICKS_PER_SECOND;
 use axum::Router;
 use axum::extract::ws::{Message, WebSocket, WebSocketUpgrade};
+use axum::http::header;
 use axum::response::{Html, Response};
 use axum::routing::get;
 use futures_util::SinkExt;
@@ -55,12 +56,31 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let router = Router::new()
         .route(
             "/",
-            get(|| async { Html("<!doctype html><title>Arena Tank Trouble</title>") }),
+            get(|| async { Html(include_str!("../web/index.html")) }),
+        )
+        .route(
+            "/style.css",
+            get(|| async { asset("text/css", include_str!("../web/style.css")) }),
+        )
+        .route(
+            "/app.js",
+            get(|| async { asset("text/javascript", include_str!("../web/app.js")) }),
+        )
+        .route(
+            "/canvas.js",
+            get(|| async { asset("text/javascript", include_str!("../web/canvas.js")) }),
         )
         .route("/ws", get(move |ws| upgrade(ws, options.seed)));
     println!("http://{}", listener.local_addr()?);
     axum::serve(listener, router).await?;
     Ok(())
+}
+
+fn asset(
+    content_type: &'static str,
+    body: &'static str,
+) -> ([(header::HeaderName, &'static str); 1], &'static str) {
+    ([(header::CONTENT_TYPE, content_type)], body)
 }
 
 async fn upgrade(ws: WebSocketUpgrade, seed: Option<u64>) -> Response {

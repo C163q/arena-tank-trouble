@@ -1,0 +1,192 @@
+:root {
+  color-scheme: light;
+  font-family: Inter, "Noto Sans CJK SC", system-ui, sans-serif;
+  font-size: 16px;
+  --ink: #25313a;
+  --secondary: #505d69;
+  --line: #d6dce0;
+  --paper: #fff;
+  --player: #a64726;
+  --target: #41677e;
+  color: var(--ink);
+  background: #edf0f2;
+}
+
+* { box-sizing: border-box; }
+[hidden] { display: none !important; }
+body { margin: 0; }
+
+.shell {
+  max-width: 1350px;
+  margin: auto;
+  padding: clamp(1rem, 3.4vw, 3rem);
+}
+
+.masthead {
+  display: flex;
+  align-items: end;
+  justify-content: space-between;
+  gap: 1rem;
+  margin-block-end: 1.45rem;
+}
+
+.project-name {
+  margin: 0 0 0.33rem;
+  color: var(--secondary);
+  font-size: 0.875rem;
+  font-weight: 650;
+}
+
+h1 {
+  margin: 0;
+  font-size: clamp(1.65rem, 3vw, 2.5rem);
+  letter-spacing: 0.02em;
+}
+
+.connection {
+  border: 1px solid var(--line);
+  background: var(--paper);
+  border-radius: 2rem;
+  flex: none;
+  padding: 0.38rem 0.8rem;
+  font-size: 0.875rem;
+  color: var(--secondary);
+}
+
+.connection.online {
+  background: #e5ede8;
+  border-color: #cad9d0;
+  color: #335447;
+}
+
+.layout {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 16.5rem;
+  align-items: start;
+  gap: 1.15rem;
+}
+
+.arena, .card {
+  border: 1px solid var(--line);
+  border-radius: 0.85rem;
+  background: var(--paper);
+  box-shadow: 0 0.25rem 0.8rem #17273508;
+}
+
+.board {
+  padding: clamp(0.35rem, 1vw, 0.8rem);
+  border-radius: 0.85rem 0.85rem 0 0;
+  background: #dde3e6;
+}
+
+canvas {
+  width: 100%;
+  aspect-ratio: 12.24 / 8.24;
+  display: block;
+  background: #f1f2ee;
+  border-radius: 0.35rem;
+}
+
+:focus-visible { outline: 2px solid var(--target); outline-offset: 3px; }
+
+.hud, .round-info {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 0.55rem 1.25rem;
+  padding: 0.72rem 0.85rem;
+}
+
+.hud { border-bottom: 1px solid var(--line); }
+.magazine, .scores, .ammo { display: flex; align-items: center; gap: 0.45rem; }
+.scores { gap: 0.65rem; }
+.chip { width: 0.72rem; height: 0.72rem; border-radius: 0.2rem; }
+.chip.player { background: var(--player); }
+.chip.target { background: var(--target); }
+.ammo { padding-inline-start: 0.2rem; gap: 0.22rem; }
+.ammo span { width: 0.66rem; height: 0.92rem; border-radius: 0.2rem; background: #dfe4e7; }
+.ammo .loaded { background: var(--player); }
+
+.round-info {
+  color: var(--secondary);
+  font-size: 0.875rem;
+  min-height: 2.7rem;
+}
+
+.round-info strong { color: var(--ink); }
+output { font-variant-numeric: tabular-nums; }
+
+.controls {
+  display: grid;
+  gap: 0.85rem;
+}
+
+.card { padding: 0.95rem; }
+h2 { font-size: 1rem; margin: 0 0 0.8rem; }
+
+.keys { display: grid; gap: 0.55rem; margin: 0; font-size: 0.875rem; }
+.keys div { display: flex; gap: 0.8rem; align-items: center; }
+dt { display: flex; gap: 0.25rem; min-width: 3.4rem; }
+dd { margin: 0; color: var(--secondary); }
+kbd {
+  border: 1px solid var(--line);
+  border-bottom-width: 2px;
+  padding: 0.15rem 0.34rem;
+  border-radius: 0.3rem;
+  background: #f4f6f7;
+  font: inherit;
+  font-weight: 650;
+}
+
+form {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  align-items: center;
+  gap: 0.53rem;
+  font-size: 0.875rem;
+}
+
+.field { display: flex; align-items: center; gap: 0.45rem; color: var(--secondary); }
+
+input, button {
+  border: 1px solid var(--line);
+  border-radius: 0.4rem;
+  font: inherit;
+}
+
+input {
+  width: 4.9rem;
+  min-width: 0;
+  padding: 0.4rem;
+  color: var(--ink);
+  background: #f4f6f7;
+}
+
+.parameter-note { color: var(--secondary); margin: 0.7rem 0; font-size: 0.875rem; }
+.buttons { display: grid; grid-template-columns: 1fr 1fr; gap: 0.45rem; }
+
+button {
+  padding: 0.53rem 0.4rem;
+  color: var(--ink);
+  background: #f4f6f7;
+  font-size: 0.875rem;
+  font-weight: 650;
+  cursor: pointer;
+}
+
+button:not(:disabled):hover { background: #e4eaee; }
+#restart-same { background: #334b5d; color: #fff; border-color: #334b5d; }
+#restart-same:not(:disabled):hover { background: #263e51; }
+button:disabled { opacity: 0.5; cursor: default; }
+#reconnect { width: 100%; margin-top: 0.6rem; }
+#error { margin: 0.65rem 0 0; color: #9f3c25; font-size: 0.875rem; }
+
+@media (max-width: 860px) {
+  .layout { grid-template-columns: minmax(0, 1fr); }
+  .controls { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); align-items: start; }
+}
+
+@media (max-width: 540px) {
+  .controls { grid-template-columns: minmax(0, 1fr); }
+}
