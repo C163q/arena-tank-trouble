@@ -326,6 +326,9 @@ def verify_browser(replay_path, screenshot):
         chooser.value.set_files(str(replay_path.with_name("replay.json")))
         expect(status).to_have_text("已载入 replay.json")
         extended = json.loads(replay_path.with_name("replay.json").read_bytes())
+        extended.pop("zone_schedule")
+        for frame in extended["frames"]:
+            frame.pop("safe_zone")
         extended["frames"][0]["walls"] = None
         open_replay.set_input_files({
             "name": "extended.json", "mimeType": "application/json",

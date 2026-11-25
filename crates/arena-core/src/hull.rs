@@ -65,10 +65,10 @@ impl OrientedBox {
         );
         let min = self.center - half;
         let max = self.center + half;
-        bounds.min.x <= min.x
-            && bounds.min.y <= min.y
-            && bounds.max.x >= max.x
-            && bounds.max.y >= max.y
+        bounds.min.x - min.x <= EPSILON
+            && bounds.min.y - min.y <= EPSILON
+            && max.x - bounds.max.x <= EPSILON
+            && max.y - bounds.max.y <= EPSILON
     }
 
     fn axes(self, other: Self) -> [Vec2; 4] {

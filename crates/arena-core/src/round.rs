@@ -494,6 +494,43 @@ mod tests {
     }
 
     #[test]
+    fn decimal_tangency_survives_until_the_following_tick() {
+        for (tick, tangent) in [(1824, pose(0.25, 4.0, 0.0)), (2097, pose(6.0, 0.5, 0.0))] {
+            let mut round = fixture(vec![], tangent, pose(8.0, 4.0, 0.0), Params::default());
+            round.tick = tick - 1;
+            idle(&mut round, 1);
+            assert!(round.view().tanks[0].alive, "exact tangency at tick {tick}");
+            idle(&mut round, 1);
+            assert!(!round.view().tanks[0].alive, "outside at tick {}", tick + 1);
+        }
+    }
+
+    #[test]
+    fn a_weapon_hit_takes_priority_over_zone_elimination() {
+        let mut round = fixture(
+            vec![],
+            pose(6.0, 4.0, 0.0),
+            pose(3.0, 3.0, 0.0),
+            Params::default(),
+        );
+        round.tick = 60 * u64::from(TICKS_PER_SECOND) - 1;
+        round.laser_trails.push(LaserTrail {
+            start: Vec2::new(2.9, 3.0),
+            end: Vec2::new(3.1, 3.0),
+            expires_at: round.tick + 2,
+            owner: 0,
+        });
+        idle(&mut round, 1);
+        assert_eq!(
+            round.view().eliminations,
+            [Elimination {
+                tank: 1,
+                owner: Some(0)
+            }]
+        );
+    }
+
+    #[test]
     fn ordinary_projectile_is_slightly_faster_than_forward_drive() {
         for (forward_secs, expected_speed) in [(0.45, 2.5), (0.90, 1.25)] {
             let params = Params {
