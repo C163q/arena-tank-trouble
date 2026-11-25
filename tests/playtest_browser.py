@@ -222,6 +222,7 @@ def wait_for_weapon_pixel(page, x, y, kind="laser", snapshot=None):
           const point = new DOMPoint(x, y).matrixTransform(ctx.getTransform());
           const [red, green, blue] = ctx.getImageData(Math.floor(point.x), Math.floor(point.y), 1, 1).data;
           if (canvas !== live) canvas.remove();
+          if (kind === "mark") return red > 205 && green > 205 && blue > 205;
           return kind === "shotgun"
             ? red > 145 && red > green + 30 && green > blue + 30
             : green > red + 20 && blue > red + 20;
@@ -289,12 +290,17 @@ def test_laser_pickup_and_fire(page, url, artifacts):
     assert reset["tanks"][0]["next_shot"] is None
 
 
-def test_shotgun_replaces_laser_in_browser(page, wire, artifacts):
+def test_shotgun_replaces_laser_in_browser(page, url, artifacts):
+    wire = open_playtest(page, url, SHOTGUN_SEED)
     first = wire.wait_for(lambda s: len(s["pickups"]) == 2, "first mixed batch", timeout=25)
     items = sorted(first["pickups"], key=lambda item: -item["x"])
     assert [item["kind"] for item in items] == ["laser", "shotgun"]
     for item in items:
         wait_for_weapon_pixel(page, item["x"] + 0.12, item["y"] + 0.12, kind=item["kind"])
+    scatter = items[1]
+    for offset in [-0.07, 0.0, 0.07]:
+        wait_for_weapon_pixel(page, scatter["x"] + offset, scatter["y"], kind="mark")
+    wait_for_weapon_pixel(page, scatter["x"] + 0.035, scatter["y"], kind="shotgun")
     page.screenshot(path=artifacts / "mixed-pickups.png")
 
     page.keyboard.down("w")
@@ -347,17 +353,14 @@ def main():
         for page in [desktop, mobile]:
             expect(page.locator("#connection-status")).to_have_text("连接已断开")
             expect(page.get_by_role("button", name="重新连接")).to_be_enabled()
-        with running_server(options.binary.resolve(), LASER_SEED) as (_, laser_url), running_server(
-            options.binary.resolve(), SHOTGUN_SEED
-        ) as (_, shotgun_url):
-            shotgun_page = browser.new_page(viewport={"width": 1366, "height": 950})
-            shotgun_page.on("pageerror", lambda error: errors.append(str(error)))
-            shotgun_wire = open_playtest(shotgun_page, shotgun_url, SHOTGUN_SEED)
+        with running_server(options.binary.resolve(), LASER_SEED) as (_, laser_url):
             laser_page = browser.new_page(viewport={"width": 1366, "height": 950})
             laser_page.on("pageerror", lambda error: errors.append(str(error)))
             test_laser_pickup_and_fire(laser_page, laser_url, options.artifacts)
-            shotgun_page.bring_to_front()
-            test_shotgun_replaces_laser_in_browser(shotgun_page, shotgun_wire, options.artifacts)
+        with running_server(options.binary.resolve(), SHOTGUN_SEED) as (_, shotgun_url):
+            shotgun_page = browser.new_page(viewport={"width": 1366, "height": 950})
+            shotgun_page.on("pageerror", lambda error: errors.append(str(error)))
+            test_shotgun_replaces_laser_in_browser(shotgun_page, shotgun_url, options.artifacts)
         assert not errors, errors
         browser.close()
     print("Browser playtest: keyboard, hit, refill, restarts, blur, responsive canvas, disconnect, laser and shotgun pickups passed")

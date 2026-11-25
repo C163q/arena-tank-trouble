@@ -468,6 +468,7 @@ mod tests {
         };
         let mut has_one_sided_volley = false;
         let mut has_different_speeds = false;
+        let mut has_distinct_angles = false;
         for seed in 0..24 {
             let mut first = make_round(seed);
             let mut replay = make_round(seed);
@@ -500,9 +501,15 @@ mod tests {
             has_different_speeds |= samples
                 .windows(2)
                 .any(|pair| (pair[0].1 - pair[1].1).abs() > 0.001);
+            has_distinct_angles |= samples.iter().enumerate().all(|(index, sample)| {
+                samples[..index]
+                    .iter()
+                    .all(|older| (older.0 - sample.0).abs() > 0.001)
+            });
         }
         assert!(has_one_sided_volley);
         assert!(has_different_speeds);
+        assert!(has_distinct_angles);
 
         let mut active = make_round(42);
         let mut idle_round = make_round(42);
