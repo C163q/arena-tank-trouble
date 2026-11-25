@@ -53,7 +53,7 @@ def verify_native_batch(binary, out, work):
     report = json.loads((out / "summary.json").read_text())
     assert report["completed"] == 4 and report["failed"] == 0
     assert report["jobs"] == 2 and report["players"] == 2
-    assert (out / "viewer.html").is_file()
+    assert not (out / "viewer.html").exists()
     totals = collections.Counter()
     wins = collections.Counter()
     for match in report["matches"]:

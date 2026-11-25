@@ -28,7 +28,7 @@ python3 scripts/league.py --matches 12 --jobs 2 --players 3 --seed 407 \
 
 排名按已完成场次的场均总分，场均完全相同则并列。总分为击杀分与存活分之和。报告保留出场数、胜场及分项积分，失败或中断的场次单列，并保留对应日志。部分场次失败时脚本仍生成汇总，并返回非零状态。
 
-每个成功结束的 `match-NNNN/` 包含独立回放、可导入的 JSON 和逐步文本。把任一局的 `replay.json` 或 `timeline.jsonl` 拖入输出目录根部的 `viewer.html` 即可播放。文本字段和 bot 接口见 [Bot 对战、接口与回放](bot-match.md)。
+每个成功结束的 `match-NNNN/` 包含独立回放、可导入的 JSON 和逐步文本。任一局的 `replay.json` 或 `timeline.jsonl` 可拖入项目根目录的通用播放器。文本字段和 bot 接口见对战指南。[通用播放器](../../viewer.html) · [Bot 对战、接口与回放](bot-match.md)
 
 ## 验证
 

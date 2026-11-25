@@ -218,7 +218,7 @@ def write_markdown(path, report):
             f'完成 {report["completed"]} / {len(report["matches"])} 局，失败 {report["failed"]} 局，'
             f'中断 {report["interrupted"]} 局。并行数 {report["jobs"]}。', file=f,
         )
-        print("\n[通用回放播放器](viewer.html) · [机器可读汇总](summary.json) · [赛程](plan.json)\n", file=f)
+        print("\n[机器可读汇总](summary.json) · [赛程](plan.json)\n", file=f)
         print("| 名次 | Bot | 出场 | 胜场 | 击杀分 | 存活分 | 总分 | 场均 |", file=f)
         print("| --- | --- | --- | --- | --- | --- | --- | --- |", file=f)
         for row in report["standings"]:
@@ -308,10 +308,6 @@ def main():
             "matches": [bout.record() for bout in bouts],
         }
         write_json(args.out / "plan.json", plan)
-        subprocess.run(
-            [str(args.runner), "viewer", "--out", str(args.out / "viewer.html")],
-            check=True, stdout=subprocess.DEVNULL,
-        )
         signal.signal(signal.SIGTERM, interrupt)
         results = execute(args, bots, bouts)
         counts = Counter(result["status"] for result in results)
@@ -326,7 +322,7 @@ def main():
         if counts["interrupted"]:
             return 130
         return int(bool(counts["failed"]))
-    except (OSError, ValueError, subprocess.CalledProcessError) as error:
+    except (OSError, ValueError) as error:
         parser.exit(1, f"{parser.prog}: {error}\n")
 
 

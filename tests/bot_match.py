@@ -211,7 +211,7 @@ def verify_timeline(path, data):
         ]
 
 
-def verify_browser(replay_path, screenshot, binary):
+def verify_browser(replay_path, screenshot):
     from playwright.sync_api import expect, sync_playwright
 
     with sync_playwright() as playwright:
@@ -246,11 +246,12 @@ def verify_browser(replay_path, screenshot, binary):
         expect(seek).to_have_value("0")
         expect(page.locator("#result")).to_contain_text("获胜")
         page.screenshot(path=screenshot, full_page=True)
-        viewer_file = replay_path.with_name("viewer.html")
-        subprocess.run([str(binary), "viewer", "--out", str(viewer_file)], check=True, capture_output=True)
+        viewer_file = ROOT / "viewer.html"
         template = context.new_page()
         template.goto((ROOT / "crates/arena-runner/web/replay.html").as_uri())
         expect(template.locator("#file-status")).to_contain_text("源码模板")
+        template.get_by_role("link", name="项目根目录的通用播放器").click()
+        expect(template).to_have_url(viewer_file.as_uri())
         template.close()
         blocked = browser.new_context(java_script_enabled=False).new_page()
         blocked.goto(viewer_file.resolve().as_uri())
@@ -338,7 +339,7 @@ def main():
     assert data["scores"][data["result"]["seat"]]["survival_points"] == 2
     verify_timeline(args.artifacts / "timeline.jsonl", data)
     if args.browser:
-        verify_browser(args.artifacts / "replay.html", args.artifacts / "replay-preview.png", binary)
+        verify_browser(args.artifacts / "replay.html", args.artifacts / "replay-preview.png")
     print("Bot match: real C ABI, timed decisions, kill and survival scoring, four-seat replay passed")
 
 

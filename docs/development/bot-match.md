@@ -20,15 +20,14 @@ cargo run --locked -p arena-runner -- --seed 407 --out .tmp/my-match demo demo d
 
 坐标以格为单位，角度用弧度，速度为格每秒。`owner` 是原发射席位，`eliminations` 记录淘汰坦克和发射者的席位号。动作状态还能辨认超时和其他错误。可按行截取所需模拟步，附上首行的列定义交给 AI 分析。
 
-在仓库根目录运行以下命令生成单独的页面。也可直接打开任意对局的 `replay.html`，两种页面都接受文件导入。
+用浏览器打开项目根目录的通用播放器。把 `replay.json` 或 `timeline.jsonl` 从文件管理器拖到页面任意位置，也可点击「选择文件」。播放器从第 0 步开始显示所选对局，并保留原先打开的回放直到新文件通过校验。[通用播放器](../../viewer.html)
+
+对局目录中的 `replay.html` 自带该局数据，打开后即可播放，也接受文件导入。裁判用同一套绘图和播放脚本生成这两种 HTML。修改模板或脚本后，可用以下命令更新项目根目录的播放器。[回放源码模板](../../crates/arena-runner/web/replay.html)
 
 ```sh
-cargo run --locked -p arena-runner -- viewer --out runs/viewer.html
+cargo run --locked -p arena-runner -- viewer --out .tmp/viewer-update.html
+mv .tmp/viewer-update.html viewer.html
 ```
-
-裁判将绘图代码和导入逻辑嵌入[回放源码模板](../../crates/arena-runner/web/replay.html)，生成可离线打开的 HTML。
-
-用浏览器直接打开生成的 HTML，从文件管理器把 `replay.json` 或 `timeline.jsonl` 拖到页面任意位置，也可点击「选择文件」。播放器从第 0 步开始显示所选对局，并保留原先打开的回放直到新文件通过校验。
 
 ## 编写 C ABI bot
 
