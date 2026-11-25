@@ -7,6 +7,7 @@
 - [本地试玩与项目定位](../README.md)面向玩家，说明启动方式和基本操作。
 - [Bot 对战、接口与回放](development/bot-match.md)说明 Linux C ABI、观测、计分与离线回放。
 - [多局 Bot 测评](development/league.md)说明配置场数与并行、查看总榜和逐局回放。
+- [构建参赛题包](development/contest-kit.md)说明参赛模板、计时工具、发布和验收。
 - [静止靶试玩版开发与验证](development/playtest.md)说明代码入口和验证流程。
 - [项目协作约定](../AGENTS.md)说明项目目标，以及开发代理开始工作时应阅读的材料。
 - [文档编写与维护规范](documentation.md)规定文档的读者、命名、阅读范围和维护责任。
@@ -24,5 +25,6 @@
 | `docs/superpowers/plans/` | Superpowers 实施计划，文件名为 `YYYY-MM-DD-<feature-name>.md`。 |
 | `docs/local.md` | 本机环境记录，包括工具版本、工作区路径和本地参考项目。由各开发者在本机维护，Git 忽略此文件。 |
 | `runs/` | 本地测评、回放和结果输出。Git 忽略此目录。 |
+| `dist/` | 参赛题包生成目录。Git 忽略此目录。 |
 | `.tmp/` | 需要跨重启保留的本地临时文件，Git 忽略此目录。 |
 | `.worktrees/` | 本地 Git 工作树的存放位置，Git 忽略此目录。 |

@@ -4,5 +4,6 @@ members = [
     "crates/arena-core",
     "crates/arena-playtest",
     "crates/arena-runner",
+    "crates/session-timer",
 ]
 resolver = "3"

@@ -2,6 +2,18 @@
 
 坦克竞技场是一款原创的迷宫坦克对战游戏，目标是让不同大语言模型编写的坦克控制算法在同一套规则下对战。当前版本提供 2–4 席 bot 对战、批量测评和单人静止靶练习。
 
+## 参赛题包
+
+参赛者编写控制一辆坦克的 Bot，最终提交 `submission/libteam.so`。使用 LLM 时有 **60 分钟开发时限，70 分钟强制收卷**。从题包内的 `README.md` 开始，题包提供基本规则、接口、C 起步文件、自测和回放。
+
+组织者可在 Linux x86_64 GNU/glibc 上生成题包。
+
+```sh
+python3 scripts/package_contest.py
+```
+
+将 `dist/contest-kit/participant.tar.gz` 分发给参赛者，按同目录的 `README.md` 操作计时器和收卷。[参赛题目模板](packaging/contest/participant/README.md) · [构建参赛题包](docs/development/contest-kit.md)
+
 ## Bot 对战
 
 ```sh

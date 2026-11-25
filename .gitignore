@@ -2,5 +2,6 @@
 /.tmp/
 /.worktrees/
 /runs/
+/dist/
 
 /target/

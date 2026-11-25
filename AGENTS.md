@@ -1,4 +1,4 @@
-# 项目协作约定（暂行）
+# 项目协作约定
 
 本项目开发受《坦克动荡》（Tank Trouble）启发的原创迷宫坦克对战游戏，用同一套规则检验和比较大语言模型（LLM）编写对战算法的能力。LLM 编写控制策略，对局中由各自的策略操控坦克。当前试玩入口见 [README.md](README.md)。
 
@@ -6,11 +6,13 @@
 
 - 编写或修改文档前，先读[文档入口](docs/README.md)确定存放位置，再按[文档规范](docs/documentation.md)处理命名、引用和维护范围。
 - 在 Codex 中工作时，遵循 [Codex 环境约定](docs/ai/codex.md)。在 Cursor 中选择模型时，参阅 [Cursor 模型选择](docs/ai/cursor-model-selection.md)。
+- 修改对战规则、Bot 接口、自测或计时流程时，查阅[题包维护指南](docs/development/contest-kit.md)，同步相应的参赛与场外模板。参赛代理的指令由[题包 AGENTS.md](packaging/contest/participant/AGENTS.md)维护。
 
 ## 核对与交付
 
 - 调研原作玩法时，记录所查版本或来源，把实际观察到的行为与本项目自行决定的竞赛规则分开写。
 - 提交文档变更前，核对相对链接能否从所在文件打开，并确认读者能区分当前能力与后续目标。
+- 修改打包流程后，用新生成的压缩包验收独立解压、编译、接入检查和换位自测。
 
 ## 版本控制
 
