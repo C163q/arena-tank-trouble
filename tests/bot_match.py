@@ -175,6 +175,13 @@ def verify_timeline(path, data):
         assert compact["tick"] == exact["tick"] == index
         assert compact["victory_at"] == exact["victory_at"]
         assert compact["eliminations"] == [[e["tank"], e["owner"]] for e in exact["eliminations"]]
+        assert len(compact["tanks"]) == len(exact["tanks"])
+        assert len(compact["projectiles"]) == len(exact["projectiles"])
+        assert compact["pickups"] == [[p["kind"], p["x"], p["y"]] for p in exact["pickups"]]
+        assert compact["laser_trails"] == [
+            [t["owner"], t["start"]["x"], t["start"]["y"], t["end"]["x"], t["end"]["y"], t["expires_at"]]
+            for t in exact["laser_trails"]
+        ]
         for tank, source in zip(compact["tanks"], exact["tanks"]):
             pose = source["pose"]
             assert tank == [pose["position"]["x"], pose["position"]["y"], pose["angle"],
@@ -191,7 +198,7 @@ def verify_timeline(path, data):
         ]
 
 
-def verify_browser(replay_path, screenshot):
+def verify_browser(replay_path, screenshot, binary):
     from playwright.sync_api import expect, sync_playwright
 
     with sync_playwright() as playwright:
@@ -226,6 +233,40 @@ def verify_browser(replay_path, screenshot):
         expect(seek).to_have_value("0")
         expect(page.locator("#result")).to_contain_text("获胜")
         page.screenshot(path=screenshot, full_page=True)
+        viewer_file = replay_path.with_name("viewer.html")
+        subprocess.run([str(binary), "viewer", "--out", str(viewer_file)], check=True, capture_output=True)
+        viewer = context.new_page()
+        viewer.on("pageerror", lambda error: errors.append(str(error)))
+        viewer.goto(viewer_file.resolve().as_uri())
+        expect(viewer.locator("#match")).to_be_hidden()
+        open_replay = viewer.locator("#open-replay")
+        status = viewer.locator("#file-status")
+        slider = viewer.locator("#seek")
+        open_replay.set_input_files(str(replay_path.with_name("replay.json")))
+        expect(status).to_have_text("已载入 replay.json")
+        expect(viewer.locator("#scoreboard tr")).to_have_count(4)
+        starting_canvas = viewer.locator("canvas").evaluate("(canvas) => canvas.toDataURL()")
+        slider.focus()
+        viewer.keyboard.press("End")
+        expect(slider).to_have_value(slider.get_attribute("max"))
+
+        viewer.evaluate(
+            """text => {
+              const dataTransfer = new DataTransfer();
+              dataTransfer.items.add(new File([text], "timeline.jsonl", {type: "application/x-ndjson"}));
+              document.body.dispatchEvent(new DragEvent("drop", {bubbles: true, cancelable: true, dataTransfer}));
+            }""",
+            replay_path.with_name("timeline.jsonl").read_text(encoding="utf-8"),
+        )
+        expect(status).to_have_text("已载入 timeline.jsonl")
+        expect(slider).to_have_value("0")
+        assert viewer.locator("canvas").evaluate("(canvas) => canvas.toDataURL()") == starting_canvas
+        open_replay.set_input_files({
+            "name": "broken.json", "mimeType": "application/json", "buffer": b"{}",
+        })
+        expect(status).to_contain_text("无法载入 broken.json")
+        expect(viewer.locator("#scoreboard tr")).to_have_count(4)
+        expect(slider).to_have_value("0")
         assert not errors, errors
         browser.close()
 
@@ -246,7 +287,7 @@ def main():
     assert data["scores"][data["result"]["seat"]]["survival_points"] == 2
     verify_timeline(args.artifacts / "timeline.jsonl", data)
     if args.browser:
-        verify_browser(args.artifacts / "replay.html", args.artifacts / "replay-preview.png")
+        verify_browser(args.artifacts / "replay.html", args.artifacts / "replay-preview.png", binary)
     print("Bot match: real C ABI, timed decisions, kill and survival scoring, four-seat replay passed")
 
 

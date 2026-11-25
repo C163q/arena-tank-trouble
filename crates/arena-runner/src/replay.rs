@@ -12,10 +12,7 @@ const CANVAS: &str = include_str!("../../arena-playtest/web/canvas.js");
 
 pub fn export(out: &Path, replay: &Replay) -> Result<PathBuf, Box<dyn Error>> {
     let encoded = serde_json::to_vec(replay)?;
-    let parent = out
-        .parent()
-        .filter(|path| !path.as_os_str().is_empty())
-        .unwrap_or_else(|| Path::new("."));
+    let parent = output_parent(out);
     fs::create_dir_all(parent)?;
     let nonce = SystemTime::now().duration_since(UNIX_EPOCH)?.as_nanos();
     let stage = parent.join(format!(".arena-replay-{}-{nonce}", std::process::id()));
@@ -35,26 +32,49 @@ fn write_files(directory: &Path, encoded: &[u8], replay: &Replay) -> io::Result<
     fs::write(directory.join("replay.json"), encoded)?;
     let timeline = File::create(directory.join("timeline.jsonl"))?;
     crate::timeline::write(BufWriter::new(timeline), replay)?;
-    let path = directory.join("replay.html");
+    let page = File::create(directory.join("replay.html"))?;
+    write_page(BufWriter::new(page), Some(encoded))
+}
+
+pub fn export_viewer(out: &Path) -> io::Result<()> {
+    fs::create_dir_all(output_parent(out))?;
+    let file = File::create_new(out)?;
+    let result = write_page(BufWriter::new(file), None);
+    if result.is_err() {
+        let _ = fs::remove_file(out);
+    }
+    result
+}
+
+fn output_parent(out: &Path) -> &Path {
+    out.parent()
+        .filter(|path| !path.as_os_str().is_empty())
+        .unwrap_or_else(|| Path::new("."))
+}
+
+fn write_page(mut file: impl Write, embedded_replay: Option<&[u8]>) -> io::Result<()> {
     let (head, tail) = PAGE
         .split_once("<!-- REPLAY_SCRIPT -->")
         .expect("script marker");
-    let mut file = BufWriter::new(File::create(&path)?);
-    write!(
-        file,
-        "{head}<script type=\"application/json\" id=\"replay-data\">"
-    )?;
-    for part in encoded.split_inclusive(|&byte| byte == b'<') {
-        if let Some(literal) = part.strip_suffix(b"<") {
-            file.write_all(literal)?;
-            file.write_all(b"\\u003c")?;
-        } else {
-            file.write_all(part)?;
+    write!(file, "{head}")?;
+    if let Some(encoded) = embedded_replay {
+        write!(
+            file,
+            "<script type=\"application/json\" id=\"replay-data\">"
+        )?;
+        for part in encoded.split_inclusive(|&byte| byte == b'<') {
+            if let Some(literal) = part.strip_suffix(b"<") {
+                file.write_all(literal)?;
+                file.write_all(b"\\u003c")?;
+            } else {
+                file.write_all(part)?;
+            }
         }
+        writeln!(file, "</script>")?;
     }
     write!(
         file,
-        "</script>\n<script type=\"module\">\n{CANVAS}\n{PLAYER}\n</script>{tail}"
+        "<script type=\"module\">\n{CANVAS}\n{PLAYER}\n</script>{tail}"
     )?;
     file.flush()
 }

@@ -9,6 +9,11 @@
 body { margin: 0; }
 main { max-width: 64rem; margin: auto; padding: 1.25rem; }
 h1 { margin: 0 0 .8rem; font-size: 1.5rem; }
+.drop-zone { display: flex; flex-wrap: wrap; align-items: center; gap: .5rem 1rem; padding: .65rem .8rem; border: 1px dashed #7e9087; border-radius: .5rem; margin-bottom: .8rem; }
+.drop-zone input { max-width: 100%; font: inherit; }
+#file-status { margin: 0 0 .8rem; overflow-wrap: anywhere; }
+#file-status:empty { display: none; }
+#file-status.error { color: #8b3427; }
 canvas { display: block; width: 100%; aspect-ratio: 3 / 2; border-radius: .5rem; background: #f1f2ee; }
 .controls { display: flex; align-items: center; flex-wrap: wrap; gap: .8rem; margin-top: .8rem; }
 input[type="range"] { min-width: 7rem; flex: 1; }
@@ -23,6 +28,12 @@ td, th { padding: .32rem .2rem; border-bottom: 1px solid #bec7be; overflow-wrap:
 <body>
 <main>
 <h1>坦克对局回放</h1>
+<label class="drop-zone" for="open-replay">
+  <span>拖入或选择 replay.json / timeline.jsonl</span>
+  <input id="open-replay" type="file" accept=".json,.jsonl,application/json,application/x-ndjson">
+</label>
+<p id="file-status" role="status"></p>
+<section id="match" aria-label="回放" hidden>
 <canvas aria-label="对局画面"></canvas>
 <div class="controls">
   <button id="play" type="button">播放</button>
@@ -36,6 +47,7 @@ td, th { padding: .32rem .2rem; border-bottom: 1px solid #bec7be; overflow-wrap:
   <thead><tr><th scope="col">席位</th><th scope="col">击杀分</th><th scope="col">存活分</th><th scope="col">总分</th></tr></thead>
   <tbody id="scoreboard"></tbody>
 </table>
+</section>
 </main>
 <!-- REPLAY_SCRIPT -->
 </body>

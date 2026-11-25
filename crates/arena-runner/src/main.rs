@@ -12,11 +12,24 @@ use std::path::{Path, PathBuf};
 use controller::{Controller, Demo};
 use matchplay::MatchConfig;
 
-const USAGE: &str = "Usage: arena-runner --out DIR [--seed N] [--max-ticks N] [--kill-points N] [--survival-points N] BOT BOT [BOT [BOT]]\nBOT: demo or a Linux shared library (.so)";
+const USAGE: &str = "Usage: arena-runner --out DIR [--seed N] [--max-ticks N] [--kill-points N] [--survival-points N] BOT BOT [BOT [BOT]]\nBOT: demo or a Linux shared library (.so)\n       arena-runner viewer --out HTML";
 
 fn main() -> Result<(), Box<dyn Error>> {
     let mut args = std::env::args_os().skip(1).peekable();
     match args.peek().and_then(|arg| arg.to_str()) {
+        Some("viewer") => {
+            args.next();
+            if args.next().as_deref() != Some(std::ffi::OsStr::new("--out")) {
+                return Err("Usage: arena-runner viewer --out HTML".into());
+            }
+            let output = args.next().ok_or("missing viewer --out value")?;
+            if args.next().is_some() {
+                return Err("Usage: arena-runner viewer --out HTML".into());
+            }
+            replay::export_viewer(Path::new(&output))?;
+            println!("{}", Path::new(&output).display());
+            return Ok(());
+        }
         Some("--help" | "-h") => {
             println!("{USAGE}");
             return Ok(());

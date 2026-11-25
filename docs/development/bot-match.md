@@ -8,9 +8,23 @@
 cargo run --locked -p arena-runner -- --seed 407 --out .tmp/my-match demo demo demo demo
 ```
 
-输出目录必须尚未存在。比赛结束后会一同生成 `replay.html` 和 `replay.json`。直接在浏览器打开 HTML 即可离线播放，支持暂停、倍速和进度跳转。1 倍速每秒推进 60 个真实游戏帧。JSON 保留规则、地图、每步局面及实际采用的动作、出局事件、积分和最终结果。示例控制器用于跑通流程。
+输出目录必须尚未存在。比赛结束后会一同生成 `replay.html`、`replay.json` 和 `timeline.jsonl`。直接在浏览器打开 HTML 即可离线播放，支持暂停、倍速和进度跳转。1 倍速每秒推进 60 个真实游戏帧。JSON 保留规则、地图、每步局面及实际采用的动作、出局事件、积分和最终结果。示例控制器用于跑通流程。
 
 只剩一辆坦克时继续模拟 120 步，撑到结算的坦克获胜。全灭则平局。裁判默认模拟到 3600 步，若已进入胜负等待则完成剩余结算步。仍有多辆坦克时到达步数上限，计时平局。可以用 `--max-ticks` 调整上限。击杀分给原发射席位，自杀零分。存活分只给最终胜者。击杀默认 1 分，最终存活默认 2 分，分别用 `--kill-points` 和 `--survival-points` 调整。
+
+## 逐步文本与通用播放器
+
+`timeline.jsonl` 是供分析使用的 UTF-8 文本。首行包含地图、种子、规则和 `columns` 列定义。从第二行开始，每个模拟步一条 JSON 记录，最后一行是本场结果和分项积分。坦克与动作按席位顺序排列。第 0 步是初始局面，之后的第 `t` 行描述推进到第 `t` 步后的真实状态，`decisions` 记录推进到这一帧采用的操作。动作用 W/S/A/D/F 表示，F 表示开火，短横线表示空操作。
+
+坐标以格为单位，角度用弧度，速度为格每秒。`owner` 是原发射席位，`eliminations` 记录淘汰坦克和发射者的席位号。动作状态还能辨认超时和其他错误。可按行截取所需模拟步，附上首行的列定义交给 AI 分析。
+
+在仓库根目录运行以下命令生成单独的页面。也可直接打开任意对局的 `replay.html`，两种页面都接受文件导入。
+
+```sh
+cargo run --locked -p arena-runner -- viewer --out .tmp/viewer.html
+```
+
+把 `replay.json` 或 `timeline.jsonl` 拖入页面，或用文件选择框打开。播放器从第 0 步开始显示所选对局，并保留原先打开的回放直到新文件通过校验。
 
 ## 编写 C ABI bot
 
@@ -42,7 +56,7 @@ cargo run --locked -p arena-runner -- --out .tmp/native-match ./my_bot.so demo
 
 ## 验证入口
 
-头文件的真实编译和动态加载测试覆盖了首步与后续时限、崩溃、非法返回、错误版本和裁判退出时终止活跃 worker。验收脚本需要带 pidfd 支持的 Linux、Python 3.9 以上和 C 编译器。离线查看器测试还需要 Python Playwright 和 Chromium，可通过 `ARENA_CHROMIUM` 指定浏览器路径。
+头文件的真实编译和动态加载测试覆盖了首步与后续时限、崩溃、非法返回、错误版本和裁判退出时终止活跃 worker。验收脚本需要带 pidfd 支持的 Linux、Python 3.10 以上和 C 编译器。离线查看器测试还需要 Python Playwright 和 Chromium，可通过 `ARENA_CHROMIUM` 指定浏览器路径。
 
 ```sh
 cargo test --workspace --locked
