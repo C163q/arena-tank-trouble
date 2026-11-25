@@ -126,7 +126,12 @@ function show() {
   time.textContent = (tick / replay.ticks_per_second).toFixed(1) + " / "
     + (last / replay.ticks_per_second).toFixed(1) + " 秒";
   // A different match can have the same tick and canvas size.
-  render(canvas, { ...replay.map, ...replay.frames[tick], round: replay, geometry: replay.geometry });
+  const { tanks, projectiles, pickups, laser_trails } = replay.frames[tick];
+  const { width, height, walls } = replay.map;
+  render(canvas, {
+    round: replay, tick, width, height, walls, geometry: replay.geometry,
+    tanks, projectiles, pickups, laser_trails,
+  });
 }
 
 function pause() {

@@ -3,7 +3,10 @@
 import argparse
 import collections
 import json
+import os
 from pathlib import Path
+import select
+import signal
 import subprocess
 import time
 import sys
@@ -12,7 +15,7 @@ import tempfile
 from bot_match import ROOT, fixture
 
 sys.path.insert(0, str(ROOT / "scripts"))
-from league import schedule
+from league import remove_runner_stage, schedule
 
 
 def verify_schedule():
@@ -86,28 +89,75 @@ def verify_native_batch(binary, out, work):
     assert all((failed_out / match["log"]).is_file() for match in report["matches"])
 
 
+def verify_non_utf8_library_path(binary, work):
+    source = fixture(work, "utf8")
+    raw_path = os.fsencode(work) + b"/raw_\xff.so"
+    library = Path(os.fsdecode(raw_path))
+    source.rename(library)
+    out = work / "non-utf8"
+    result = subprocess.run(
+        league_cli(binary, out, [library, "demo"], matches=1),
+        capture_output=True, text=True, timeout=15,
+    )
+    assert result.returncode == 0, result.stderr
+    summary = json.loads((out / "summary.json").read_text())
+    assert os.fsencode(summary["bots"][0]["source"]) == raw_path
+    assert "\ufffd" in summary["bots"][0]["name"]
+
+
+def verify_staging_cleanup(work):
+    owned = work / ".arena-replay-31415-1"
+    other = work / ".arena-replay-31416-1"
+    for directory in (owned, other):
+        directory.mkdir()
+        (directory / "timeline.jsonl").write_bytes(b"partial")
+    remove_runner_stage(work, 31415)
+    assert not owned.exists() and (other / "timeline.jsonl").is_file()
+
+
 def verify_interruption(binary, work):
-    slow = fixture(work, "slow", kind=1)
+    slow = fixture(work, "blocked", kind=7)
     passive = fixture(work, "passive")
     out = work / "interrupted"
     with subprocess.Popen(
         league_cli(binary, out, [slow, passive], matches=7),
         stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
     ) as process:
+        helpers = []
         try:
             deadline = time.monotonic() + 5
             while time.monotonic() < deadline:
-                if len(list((out / "logs").glob("*.log"))) >= 2:
-                    break
+                logs = list((out / "logs").glob("*.log"))
+                helper_pids = {
+                    int(line.split()[1]) for log in logs for line in log.read_text().splitlines()
+                    if line.startswith("helper ")
+                }
+                if len(helper_pids) >= 2:
+                    for pid in helper_pids:
+                        try:
+                            helpers.append(os.pidfd_open(pid))
+                        except ProcessLookupError:
+                            pass
+                    if helpers:
+                        break
                 assert process.poll() is None
-                time.sleep(0.01)
+                time.sleep(0.005)
             else:
-                raise AssertionError("parallel games did not start")
+                raise AssertionError("parallel games did not start their helpers")
             process.terminate()
             assert process.wait(timeout=5) == 130
+            for helper in helpers:
+                assert select.select([helper], [], [], 2)[0], "helper survived league interruption"
         finally:
             if process.poll() is None:
                 process.kill()
+            for helper in helpers:
+                try:
+                    signal.pidfd_send_signal(helper, signal.SIGKILL)
+                except ProcessLookupError:
+                    pass
+                finally:
+                    os.close(helper)
     report = json.loads((out / "summary.json").read_text())
     assert len(report["matches"]) == 7
     assert report["interrupted"] > 0
@@ -123,6 +173,8 @@ def main():
     with tempfile.TemporaryDirectory(prefix="arena-league-native-") as directory:
         verify_native_batch(args.binary.resolve(), args.artifacts.resolve(), Path(directory))
         verify_interruption(args.binary.resolve(), Path(directory))
+        verify_non_utf8_library_path(args.binary.resolve(), Path(directory))
+        verify_staging_cleanup(Path(directory))
     print("League: deterministic rotations, parallel native matches, standings and failures passed")
 
 

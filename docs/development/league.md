@@ -32,7 +32,7 @@ python3 scripts/league.py --matches 12 --jobs 2 --players 3 --seed 407 \
 
 ## 验证
 
-在 Linux 上构建裁判后运行下列命令。脚本用本机 C 编译器生成测试 bot，覆盖同名库、换位、并行执行、失败场次和中断，并写出可查看的汇总。
+在 Linux 上构建裁判后运行下列命令。脚本用本机 C 编译器生成测试 bot，覆盖同名库、换位、并行执行、失败场次和中断时关闭 bot 进程组，并写出可查看的汇总。
 
 ```sh
 PYTHONDONTWRITEBYTECODE=1 python3 tests/league_integration.py --artifacts .tmp/league-check

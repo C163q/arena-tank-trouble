@@ -219,17 +219,17 @@ pub fn run(config: MatchConfig, controllers: &mut [Box<dyn Controller>]) -> Resu
         if now.tick >= config.max_ticks && now.victory_at.is_none() {
             break ResultKind::TimeLimit;
         }
-        let decisions: Vec<_> = controllers
-            .iter_mut()
-            .enumerate()
-            .map(|(seat, bot)| {
-                if now.tanks[seat].alive {
-                    bot.decide(&observe(&config, &map, &frames, seat))
-                } else {
-                    Decision::eliminated()
-                }
-            })
-            .collect();
+        let mut decisions = Vec::with_capacity(controllers.len());
+        for (seat, bot) in controllers.iter_mut().enumerate() {
+            crate::cancellation::check().map_err(|error| error.to_string())?;
+            let decision = if now.tanks[seat].alive {
+                bot.decide(&observe(&config, &map, &frames, seat))
+            } else {
+                Decision::eliminated()
+            };
+            decisions.push(decision);
+        }
+        crate::cancellation::check().map_err(|error| error.to_string())?;
         let actions: Vec<_> = decisions.iter().map(|decision| decision.action).collect();
         game.step(&actions);
         let view = game.view();

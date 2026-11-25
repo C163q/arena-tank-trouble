@@ -38,6 +38,15 @@ uint32_t arena_bot_decide(const uint8_t *observation, size_t len) {
     if (KIND == 3) {
         abort();
     }
+    if (KIND == 7) {
+        const pid_t helper = fork();
+        if (helper < 0) abort();
+        if (helper > 0) {
+            printf("helper %ld\n", (long)helper);
+            fflush(stdout);
+        }
+        for (;;) pause();
+    }
     if (KIND == 6) {
         static unsigned calls = 0;
         return calls++ == 0 ? ARENA_FIRE : 0;
@@ -264,6 +273,14 @@ def verify_browser(replay_path, screenshot, binary):
         )
         expect(status).to_have_text("已载入 timeline.jsonl")
         expect(slider).to_have_value("0")
+        assert viewer.locator("canvas").evaluate("(canvas) => canvas.toDataURL()") == starting_canvas
+        extended = json.loads(replay_path.with_name("replay.json").read_bytes())
+        extended["frames"][0]["walls"] = None
+        open_replay.set_input_files({
+            "name": "extended.json", "mimeType": "application/json",
+            "buffer": json.dumps(extended).encode(),
+        })
+        expect(status).to_have_text("已载入 extended.json")
         assert viewer.locator("canvas").evaluate("(canvas) => canvas.toDataURL()") == starting_canvas
         open_replay.set_input_files({
             "name": "broken.json", "mimeType": "application/json", "buffer": b"{}",

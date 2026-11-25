@@ -1,3 +1,4 @@
+mod cancellation;
 mod controller;
 mod matchplay;
 #[cfg(target_os = "linux")]
@@ -71,13 +72,15 @@ fn main() -> Result<(), Box<dyn Error>> {
     if out.exists() {
         return Err(format!("output path already exists: {}", out.display()).into());
     }
-    let mut controllers = bots
-        .into_iter()
-        .enumerate()
-        .map(|(seat, bot)| load_bot(seat, bot))
-        .collect::<Result<Vec<_>, _>>()?;
+    cancellation::install()?;
+    let mut controllers = Vec::with_capacity(bots.len());
+    for (seat, bot) in bots.into_iter().enumerate() {
+        cancellation::check()?;
+        controllers.push(load_bot(seat, bot)?);
+    }
     let result = matchplay::run(config, &mut controllers)?;
     drop(controllers);
+    cancellation::check()?;
     let file = replay::export(&out, &result)?;
     println!("{}", file.display());
     Ok(())

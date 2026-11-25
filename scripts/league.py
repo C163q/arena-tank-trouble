@@ -12,8 +12,10 @@ import os
 from pathlib import Path
 import random
 import signal
+import shutil
 import subprocess
 import threading
+import time
 
 ROOT = Path(__file__).resolve().parents[1]
 
@@ -65,7 +67,7 @@ def schedule(bot_count, players, matches, seed):
 
 def write_json(path, value):
     with path.open("w", encoding="utf-8") as output:
-        json.dump(value, output, ensure_ascii=False, indent=2)
+        json.dump(value, output, indent=2)
         output.write("\n")
 
 
@@ -78,6 +80,15 @@ def read_result(timeline):
     if footer.get("type") != "result":
         raise ValueError("missing result record in timeline")
     return footer
+
+
+def remove_runner_stage(output, pid):
+    # A terminated Rust referee cannot run its own replay staging cleanup.
+    prefix = f".arena-replay-{pid}-"
+    for directory in output.glob(prefix + "*"):
+        nonce = directory.name.removeprefix(prefix)
+        if nonce.isascii() and nonce.isdecimal() and not directory.is_symlink():
+            shutil.rmtree(directory, ignore_errors=True)
 
 
 def execute(args, bots, bouts):
@@ -112,7 +123,9 @@ def execute(args, bots, bouts):
                     with lock:
                         active.discard(process)
             if code != 0:
-                status = "interrupted" if stopped.is_set() else "failed"
+                remove_runner_stage(output, process.pid)
+                cancelled = stopped.is_set() or code in (-signal.SIGINT, -signal.SIGTERM)
+                status = "interrupted" if cancelled else "failed"
                 return {**record, "status": status, "exit_code": code}
             timeline = f"{name}/timeline.jsonl"
             footer = read_result(output / timeline)
@@ -136,11 +149,15 @@ def execute(args, bots, bouts):
     except KeyboardInterrupt:
         with lock:
             stopped.set()
-            for process in active:
-                try:
-                    process.kill()
-                except ProcessLookupError:
-                    pass
+            processes = list(active)
+        for process in processes:
+            process.terminate()
+        deadline = time.monotonic() + 2
+        for process in processes:
+            try:
+                process.wait(timeout=max(0, deadline - time.monotonic()))
+            except subprocess.TimeoutExpired:
+                process.kill()
     finally:
         pool.shutdown(wait=True, cancel_futures=stopped.is_set())
     results = []
@@ -191,7 +208,8 @@ def rank(bots, matches):
 def write_markdown(path, report):
     def label(bot):
         name = " ".join(report["bots"][bot]["name"].split())
-        name = html.escape(name).replace("|", r"\|").replace("[", r"\[").replace("]", r"\]")
+        name = html.escape(name).replace("\\", "\\\\")
+        name = name.replace("|", r"\|").replace("[", r"\[").replace("]", r"\]")
         return f'{bot + 1} 号 {name}'
 
     with path.open("w", encoding="utf-8") as f:
@@ -239,7 +257,8 @@ def bot_specs(specs):
                 raise ValueError(f"bot path is not a regular file: {path}")
             with path.open("rb") as file:
                 digest = hashlib.file_digest(file, "sha256").hexdigest()
-            bots.append({"id": index, "name": path.stem, "source": str(path), "sha256": digest})
+            name = os.fsencode(path.stem).decode("utf-8", errors="replace")
+            bots.append({"id": index, "name": name, "source": str(path), "sha256": digest})
     return bots
 
 
