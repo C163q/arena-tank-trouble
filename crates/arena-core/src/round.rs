@@ -2,7 +2,7 @@ use crate::projectile::{Impact, Projectile};
 use crate::{Action, MUZZLE_DISTANCE, Maze, Params, Pose, TICKS_PER_SECOND, Vec2, drive};
 
 const MAGAZINE_CAPACITY: u8 = 5;
-const PROJECTILE_STEP: f64 = 4.5 / TICKS_PER_SECOND as f64;
+const PROJECTILE_SPEED_RATIO: f64 = 1.125;
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 #[cfg_attr(feature = "serde", derive(serde::Serialize))]
@@ -135,8 +135,10 @@ impl Round {
                 self.projectiles.push(bullet);
             }
         }
+        let projectile_step =
+            PROJECTILE_SPEED_RATIO / self.params.forward_secs / f64::from(TICKS_PER_SECOND);
         self.projectiles
-            .retain_mut(|bullet| advance(bullet, PROJECTILE_STEP));
+            .retain_mut(|bullet| advance(bullet, projectile_step));
         self.outcome = match hits {
             [false, false] => RoundOutcome::Running,
             [false, true] => RoundOutcome::TargetHit,
@@ -222,18 +224,23 @@ mod tests {
     }
 
     #[test]
-    fn ordinary_projectile_travels_half_the_previous_distance_per_tick() {
-        let mut round = fixture(
-            vec![],
-            pose(1.0, 1.0, 0.0),
-            pose(1.0, 7.0, 0.0),
-            Params::default(),
-        );
-        fire(&mut round);
-        let first = round.view().projectiles[0].position;
-        idle(&mut round, 1);
-        let second = round.view().projectiles[0].position;
-        assert!((second.x - first.x - 0.075).abs() < 1e-9);
+    fn ordinary_projectile_is_slightly_faster_than_forward_drive() {
+        for (forward_secs, expected_speed) in [(0.45, 2.5), (0.90, 1.25)] {
+            let params = Params {
+                forward_secs,
+                ..Params::default()
+            };
+            let mut round = fixture(vec![], pose(1.0, 1.0, 0.0), pose(1.0, 7.0, 0.0), params);
+            fire(&mut round);
+            let first = round.view().projectiles[0].position;
+            idle(&mut round, 1);
+            let second = round.view().projectiles[0].position;
+            let speed = (second.x - first.x) * f64::from(TICKS_PER_SECOND);
+            assert!(
+                (speed - expected_speed).abs() < 1e-9,
+                "{forward_secs}s: {speed}"
+            );
+        }
     }
 
     #[test]
@@ -242,7 +249,7 @@ mod tests {
         let make_round = || fixture(vec![], pose(1.0, 1.0, 0.0), start, Params::default());
         let mut stationary = make_round();
         fire(&mut stationary);
-        idle(&mut stationary, 50);
+        idle(&mut stationary, 70);
         assert_eq!(stationary.view().outcome, RoundOutcome::TargetHit);
 
         let mut turning = make_round();
@@ -256,7 +263,7 @@ mod tests {
                 },
             ]);
         }
-        idle(&mut turning, 40);
+        idle(&mut turning, 60);
         let view = turning.view();
         assert_eq!(view.tanks[1].pose.position, start.position);
         assert_eq!(view.outcome, RoundOutcome::Running);
@@ -344,7 +351,7 @@ mod tests {
             },
         );
         fire(&mut round);
-        idle(&mut round, 3);
+        idle(&mut round, 6);
         let at_corner = round.view().projectiles[0].position;
         idle(&mut round, 1);
         let after = round.view().projectiles[0].position;

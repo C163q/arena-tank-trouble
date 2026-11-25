@@ -1,5 +1,6 @@
 use arena_core::{
-    Action, MUZZLE_DISTANCE, Params, Round, RoundOutcome, RoundView, TANK_LENGTH, TANK_WIDTH,
+    Action, MUZZLE_DISTANCE, PROJECTILE_RADIUS, Params, Round, RoundOutcome, RoundView,
+    TANK_LENGTH, TANK_WIDTH,
 };
 use rand::{RngCore, SeedableRng, rngs::StdRng};
 use serde::Deserialize;
@@ -152,6 +153,7 @@ impl Session {
                 "tank_length": TANK_LENGTH,
                 "tank_width": TANK_WIDTH,
                 "muzzle_distance": MUZZLE_DISTANCE,
+                "projectile_radius": PROJECTILE_RADIUS,
             },
             "width": view.maze.width,
             "height": view.maze.height,
@@ -237,7 +239,7 @@ mod tests {
     fn scores_once_and_keeps_score_only_on_same_map() {
         let mut game = Session::new(407);
         game.receive(&fire(0));
-        for _ in 0..48 {
+        for _ in 0..95 {
             game.tick();
         }
         let complete = game.state();

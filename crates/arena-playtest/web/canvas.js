@@ -74,7 +74,7 @@ export function render(canvas, state) {
   ctx.fillStyle = palette.wall;
   for (const { position: { x, y } } of state.projectiles) {
     ctx.beginPath();
-    ctx.arc(x, y, 0.035, 0, Math.PI * 2);
+    ctx.arc(x, y, state.geometry.projectile_radius, 0, Math.PI * 2);
     ctx.fill();
   }
 }

@@ -1,8 +1,6 @@
 use crate::collision::{EPSILON, sweep_maze};
 use crate::hull::Hull;
-use crate::{Maze, Pose, Vec2};
-
-const RADIUS: f64 = 0.035;
+use crate::{Maze, PROJECTILE_RADIUS, Pose, Vec2};
 
 pub(super) struct Projectile {
     pub position: Vec2,
@@ -35,7 +33,7 @@ impl Projectile {
     ) -> Option<Impact> {
         while distance > EPSILON {
             let delta = self.direction.scale(distance);
-            let wall = sweep_maze(maze, self.position, delta, RADIUS);
+            let wall = sweep_maze(maze, self.position, delta, PROJECTILE_RADIUS);
             let tank = self.first_tank_contact(tanks, delta);
             if let Some((index, time)) = tank
                 && wall.is_none_or(|hit| time < hit.time - EPSILON)
@@ -70,7 +68,7 @@ impl Projectile {
             .filter(|&(index, _)| index != self.owner || self.contacts != 0)
             .filter_map(|(index, &tank)| {
                 Hull::new(tank)
-                    .disc_contact(self.position, delta, RADIUS)
+                    .disc_contact(self.position, delta, PROJECTILE_RADIUS)
                     .map(|time| (index, time))
             })
             .min_by(|a, b| a.1.total_cmp(&b.1))

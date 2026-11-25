@@ -100,6 +100,7 @@ def test_keyboard_hit_and_restart(page, url):
     }
     assert initial["geometry"]["tank_length"] == 0.42
     assert initial["geometry"]["tank_width"] == 0.34
+    assert initial["geometry"]["projectile_radius"] == 0.035
     spawn = player_pose(initial)
     page.keyboard.down("w")
     moved = wire.wait_for(lambda s: player_pose(s)["position"] != spawn["position"], "forward movement")
