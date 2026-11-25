@@ -202,15 +202,28 @@ def test_blur_releases_input(page, url):
     page.keyboard.up("w")
 
 
-def wait_for_laser_pixel(page, x, y):
+def wait_for_laser_pixel(page, x, y, snapshot=None):
     page.wait_for_function(
-        """({x, y}) => {
-          const ctx = document.querySelector("canvas").getContext("2d");
+        """async ({x, y, snapshot}) => {
+          const live = document.querySelector("canvas");
+          let canvas = live;
+          if (snapshot) {
+            const {render} = await import("/canvas.js");
+            canvas = document.createElement("canvas");
+            canvas.style.position = "fixed";
+            canvas.style.left = "-2000px";
+            canvas.style.width = live.clientWidth + "px";
+            canvas.style.height = live.clientHeight + "px";
+            document.body.append(canvas);
+            render(canvas, snapshot);
+          }
+          const ctx = canvas.getContext("2d");
           const point = new DOMPoint(x, y).matrixTransform(ctx.getTransform());
           const [red, green, blue] = ctx.getImageData(Math.floor(point.x), Math.floor(point.y), 1, 1).data;
+          if (canvas !== live) canvas.remove();
           return green > red + 20 && blue > red + 20;
         }""",
-        arg={"x": x, "y": y},
+        arg={"x": x, "y": y, "snapshot": snapshot},
         timeout=500,
     )
 
@@ -255,7 +268,8 @@ def test_laser_pickup_and_fire(page, url, artifacts):
     assert ammo(normal) == ammo(loaded) - 1
     start = laser["laser_trails"][0]["start"]
     end = laser["laser_trails"][0]["end"]
-    wait_for_laser_pixel(page, (start["x"] + end["x"]) / 2, (start["y"] + end["y"]) / 2)
+    # The live first segment may have expired by the time the shell is visible.
+    wait_for_laser_pixel(page, (start["x"] + end["x"]) / 2, (start["y"] + end["y"]) / 2, snapshot=laser)
     page.screenshot(path=artifacts / "laser-trail.png")
 
     lifetime.fill("0.50")
