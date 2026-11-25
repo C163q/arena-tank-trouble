@@ -1,6 +1,6 @@
 use arena_core::{
     Action, MUZZLE_DISTANCE, PROJECTILE_RADIUS, Params, Round, RoundOutcome, RoundView,
-    TANK_LENGTH, TANK_WIDTH,
+    TANK_LENGTH, TANK_WIDTH, WALL_THICKNESS,
 };
 use rand::{RngCore, SeedableRng, rngs::StdRng};
 use serde::Deserialize;
@@ -154,6 +154,7 @@ impl Session {
                 "tank_width": TANK_WIDTH,
                 "muzzle_distance": MUZZLE_DISTANCE,
                 "projectile_radius": PROJECTILE_RADIUS,
+                "wall_thickness": WALL_THICKNESS,
             },
             "width": view.maze.width,
             "height": view.maze.height,

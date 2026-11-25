@@ -59,15 +59,15 @@ export function render(canvas, state) {
   ctx.setTransform(scale, 0, 0, scale,
     (width - state.width * scale) / 2, (height - state.height * scale) / 2);
 
-  ctx.strokeStyle = palette.wall;
-  ctx.lineWidth = 0.08;
-  ctx.lineCap = "round";
+  const thickness = state.geometry.wall_thickness;
+  const half = thickness / 2;
+  ctx.fillStyle = palette.wall;
   ctx.beginPath();
   for (const { a, b } of state.walls) {
-    ctx.moveTo(a.x, a.y);
-    ctx.lineTo(b.x, b.y);
+    ctx.rect(Math.min(a.x, b.x) - half, Math.min(a.y, b.y) - half,
+      Math.abs(a.x - b.x) + thickness, Math.abs(a.y - b.y) + thickness);
   }
-  ctx.stroke();
+  ctx.fill();
 
   tank(ctx, state.tanks[0].pose, palette.player, state.geometry);
   tank(ctx, state.tanks[1].pose, palette.target, state.geometry);

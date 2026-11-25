@@ -1,5 +1,5 @@
 use crate::collision::{EPSILON, sweep_maze};
-use crate::hull::Hull;
+use crate::hull::OrientedBox;
 use crate::{Maze, PROJECTILE_RADIUS, Pose, Vec2};
 
 pub(super) struct Projectile {
@@ -67,7 +67,7 @@ impl Projectile {
             .enumerate()
             .filter(|&(index, _)| index != self.owner || self.contacts != 0)
             .filter_map(|(index, &tank)| {
-                Hull::new(tank)
+                OrientedBox::tank(tank)
                     .disc_contact(self.position, delta, PROJECTILE_RADIUS)
                     .map(|time| (index, time))
             })

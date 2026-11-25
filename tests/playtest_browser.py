@@ -100,7 +100,33 @@ def test_keyboard_hit_and_restart(page, url):
     }
     assert initial["geometry"]["tank_length"] == 0.42
     assert initial["geometry"]["tank_width"] == 0.34
-    assert initial["geometry"]["projectile_radius"] == 0.035
+    assert initial["geometry"]["projectile_radius"] == 0.042
+    assert initial["geometry"]["wall_thickness"] == 0.08
+    assert page.evaluate(
+        """async (state) => {
+          const { render } = await import("/canvas.js");
+          const canvas = document.createElement("canvas");
+          canvas.style.cssText = "position:fixed;left:-2000px;width:1000px;height:1000px";
+          document.body.append(canvas);
+          render(canvas, {
+            ...state, width: 3, height: 3,
+            walls: [{a: {x: 1, y: 1}, b: {x: 2, y: 1}}],
+            tanks: state.tanks.map((tank) => ({...tank, pose: {position: {x: 0.4, y: 0.4}, angle: 0}})),
+          });
+          const ctx = canvas.getContext("2d");
+          const transform = ctx.getTransform();
+          const colorAt = (worldX, worldY) => {
+            const {x, y} = new DOMPoint(worldX, worldY).matrixTransform(transform);
+            return [...ctx.getImageData(Math.floor(x), Math.floor(y), 1, 1).data].join(",");
+          };
+          // This point is inside the square cap, outside the corresponding round cap.
+          const corner = colorAt(2.034, 1.034);
+          const isWall = corner === colorAt(2, 1) && corner !== colorAt(2.07, 1.07);
+          canvas.remove();
+          return isWall;
+        }""",
+        initial,
+    )
     spawn = player_pose(initial)
     page.keyboard.down("w")
     moved = wire.wait_for(lambda s: player_pose(s)["position"] != spawn["position"], "forward movement")

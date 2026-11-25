@@ -1,7 +1,8 @@
 use std::f64::consts::{PI, TAU};
 
-use crate::hull::Hull;
-use crate::{Maze, Pose, TANK_LENGTH, TANK_WIDTH, TICKS_PER_SECOND, Vec2, WALL_THICKNESS, Wall};
+use crate::collision::Bounds;
+use crate::hull::OrientedBox;
+use crate::{Maze, Pose, TANK_LENGTH, TANK_WIDTH, TICKS_PER_SECOND, Vec2};
 
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
 pub struct Action {
@@ -64,39 +65,37 @@ pub fn drive(maze: &Maze, mut pose: Pose, other: Pose, action: Action, params: &
         return pose;
     }
     let travel = speed / f64::from(TICKS_PER_SECOND);
-    let reach = TANK_LENGTH.hypot(TANK_WIDTH) / 2.0 + WALL_THICKNESS / 2.0 + travel.abs();
-    let walls: Vec<_> = maze
+    let hull_radius = TANK_LENGTH.hypot(TANK_WIDTH) / 2.0;
+    let reach = hull_radius + travel.abs();
+    let mut obstacles: Vec<_> = maze
         .walls
         .iter()
         .copied()
-        .filter(|wall| near(wall, pose.position, reach))
+        .map(Bounds::wall)
+        .filter(|bounds| bounds.near(pose.position, reach))
+        .map(OrientedBox::axis_aligned)
         .collect();
-    let other = Hull::new(other);
+    let separation = other.position - pose.position;
+    if separation.dot(separation) <= (reach + hull_radius).powi(2) {
+        obstacles.push(OrientedBox::tank(other));
+    }
 
     if turn != 0.0 {
         let change = turn * TAU / (params.turn_secs * f64::from(TICKS_PER_SECOND));
-        let available_turn = Hull::new(pose).turn_fraction(change, &walls, other);
+        let available_turn = OrientedBox::tank(pose).turn_fraction(change, &obstacles);
         let angle = pose.angle + change * available_turn;
         pose.angle = (angle + PI).rem_euclid(TAU) - PI;
     }
     if speed != 0.0 {
         let movement = Vec2::from_angle(pose.angle).scale(travel);
-        let hull = Hull::new(pose);
-        let fraction = walls
+        let hull = OrientedBox::tank(pose);
+        let fraction = obstacles
             .into_iter()
-            .filter_map(|wall| hull.wall_contact(movement, wall))
-            .chain(hull.hull_contact(movement, other))
+            .filter_map(|obstacle| hull.movement_contact(movement, obstacle))
             .fold(1.0, f64::min);
         pose.position = pose.position + movement.scale(fraction);
     }
     pose
-}
-
-fn near(wall: &Wall, center: Vec2, reach: f64) -> bool {
-    let a = wall.a;
-    let b = wall.b;
-    (a.x.min(b.x) - reach..=a.x.max(b.x) + reach).contains(&center.x)
-        && (a.y.min(b.y) - reach..=a.y.max(b.y) + reach).contains(&center.y)
 }
 
 #[cfg(test)]
@@ -237,6 +236,32 @@ mod tests {
                 .x
                 > 0.736
         );
+    }
+
+    #[test]
+    fn square_wall_end_blocks_an_overlapping_tank_corner() {
+        let maze = Maze {
+            width: 4,
+            height: 4,
+            walls: vec![Wall {
+                a: Vec2::new(1.0, 1.0),
+                b: Vec2::new(2.0, 1.0),
+            }],
+        };
+        let pose = Pose {
+            position: Vec2::new(2.27, 1.206),
+            angle: PI,
+        };
+        let other = Pose {
+            position: Vec2::new(3.5, 3.5),
+            angle: 0.0,
+        };
+        let forward = Action {
+            forward: true,
+            ..Action::default()
+        };
+        let after = drive(&maze, pose, other, forward, &Params::default());
+        assert!((after.position.x - 2.25).abs() < 1e-8);
     }
 
     #[test]
