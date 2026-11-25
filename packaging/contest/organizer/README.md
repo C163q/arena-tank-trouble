@@ -15,11 +15,11 @@ tar -xzf participant.tar.gz -C participant-work
 
 将 `participant-work/arena-contest/` 设为参赛者工作目录。为每位参赛者准备独立的文件访问范围，参赛者应能读取自己的题包和工具，组织者单独保管计时器、其他提交及正式赛程。
 
-在 Linux x86_64 GNU/glibc 上运行，需要系统提供 `libgcc_s.so.1`。最低 glibc 版本见解压目录内的 `manifest.json`。自测需要 Python 3.11 或以上。计时前准备好参赛者所需的编译器，并进入解压目录检查裁判能否加载基准。
+在 Linux x86_64 GNU/glibc 上运行，需要系统提供 `libgcc_s.so.1`。最低 glibc 版本见解压目录内的 `manifest.json`。自测需要 Python 3.11 或以上。计时前准备好参赛者所需的编译器，并进入解压目录检查裁判能否加载两档基准。
 
 ```sh
 cd participant-work/arena-contest
-python3 scripts/selftest.py check --bot lib/libarena_baseline_bot.so --out runs/environment
+python3 scripts/selftest.py check --opponent challenge --bot lib/libarena_baseline_bot.so --out runs/environment
 ```
 
 ## LLM 开发计时与收卷

@@ -1,6 +1,7 @@
 [workspace]
 members = [
     "crates/arena-baseline-bot",
+    "crates/arena-challenge-bot",
     "crates/arena-core",
     "crates/arena-playtest",
     "crates/arena-runner",

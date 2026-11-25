@@ -10,6 +10,16 @@ pub(super) struct Contact {
     pub corner: bool,
 }
 
+impl Contact {
+    pub fn reflect(self, incoming: Vec2) -> Vec2 {
+        if self.corner {
+            incoming.scale(-1.0)
+        } else {
+            incoming - self.normal.scale(2.0 * incoming.dot(self.normal))
+        }
+    }
+}
+
 #[derive(Clone, Copy)]
 pub(super) struct Bounds {
     pub min: Vec2,

@@ -12,6 +12,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "arena-challenge-bot"
+version = "0.1.0"
+dependencies = [
+ "arena-core",
+ "serde",
+ "serde_json",
+]
+
+[[package]]
 name = "arena-core"
 version = "0.1.0"
 dependencies = [

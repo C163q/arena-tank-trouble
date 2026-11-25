@@ -20,6 +20,12 @@ python3 scripts/selftest.py run --out runs/quick
 
 第一条自测检查裁判能否加载并调用你的库。第二条让你和基准 Bot 对战两局，同一张地图交换出生位。打开 `runs/quick/summary.md` 可以看到得分和回放链接。每次重测用一个新目录名。[自测和回放](docs/testing.md)
 
+打赢基础档后，可以用挑战档检验策略。挑战 Bot 会争夺中心位置，也会利用墙面反弹开火。
+
+```sh
+python3 scripts/selftest.py run --opponent challenge --out runs/challenge
+```
+
 写策略时，可以从一个小目标开始，比如让坦克沿一条走廊移动，或朝看得见的目标开火。
 
 **正式比赛中，其他参赛者的 Bot 可能比基准 Bot 强不少。** 即使已经打赢基准，也请在开发时限内尽力优化。可以换几个地图种子重测，从失分的回放找出原因，再比较改动前后的成绩，提交表现最好的一版。

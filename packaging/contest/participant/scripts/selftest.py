@@ -1,4 +1,4 @@
-"""Check a bot or play two games against the baseline with swapped seats."""
+"""Check a bot or play two games against a benchmark with swapped seats."""
 
 import argparse
 import json
@@ -9,7 +9,7 @@ import sys
 
 ROOT = Path(__file__).resolve().parents[1]
 RUNNER = ROOT / "bin/arena-runner"
-BASELINE = ROOT / "lib/libarena_baseline_bot.so"
+OPPONENTS = {name: ROOT / f"lib/libarena_{name}_bot.so" for name in ("baseline", "challenge")}
 
 
 def main():
@@ -18,19 +18,21 @@ def main():
     parser.add_argument("--out", type=Path, required=True, help="new output directory")
     parser.add_argument("--bot", type=Path, default=ROOT / "submission/libteam.so")
     parser.add_argument("--seed", type=int, default=407)
+    parser.add_argument("--opponent", choices=OPPONENTS, default="baseline")
     args = parser.parse_args()
+    opponent = OPPONENTS[args.opponent]
     try:
         bot = args.bot.resolve(strict=True)
         if args.mode == "run":
             return subprocess.call([
                 sys.executable, ROOT / "scripts/league.py", "--runner", RUNNER,
                 "--out", args.out, "--seed", str(args.seed), "--matches", "2",
-                "--players", "2", "--jobs", "1", bot, BASELINE,
+                "--players", "2", "--jobs", "1", bot, opponent,
             ])
 
         result = subprocess.run([
             RUNNER, "--out", args.out, "--seed", str(args.seed),
-            "--max-ticks", "2", bot, BASELINE,
+            "--max-ticks", "2", bot, opponent,
         ], capture_output=True, text=True, timeout=10)
         if result.returncode:
             print(result.stderr.rstrip() or result.stdout.rstrip(), file=sys.stderr)

@@ -6,7 +6,7 @@
 python3 scripts/package_contest.py
 ```
 
-默认输出为 `dist/contest-kit/`。使用 `--out` 指定新目录，或者在 Cargo 依赖已缓存的机器上加 `--offline`。构建脚本使用独立的 `target/contest-build/` 缓存，并编译发布版裁判、基准 Bot 和计时工具。它检查构建产物的调试节、记录链接器要求的 glibc 版本，再以不覆盖已有目录的方式发布。
+默认输出为 `dist/contest-kit/`。使用 `--out` 指定新目录，或者在 Cargo 依赖已缓存的机器上加 `--offline`。构建脚本使用独立的 `target/contest-build/` 缓存，并编译发布版裁判、基础档与挑战档 Bot 和计时工具。它检查构建产物的调试节、记录链接器要求的 glibc 版本，再以不覆盖已有目录的方式发布。
 
 | 输出 | 用途 |
 | --- | --- |
@@ -31,4 +31,4 @@ python3 scripts/package_contest.py
 python3 tests/contest_package.py --kit dist/contest-kit --out .tmp/contest-package-check
 ```
 
-验收检查题包清单和编译命令，运行接入检查、两局同图换位自测，并确认非法动作会被接入检查检出。结果和回放保存在解压目录的 `runs/`。
+验收检查题包清单和编译命令，运行接入检查、两档对手的同图换位自测，并确认非法动作会被接入检查检出。结果和回放保存在解压目录的 `runs/`。

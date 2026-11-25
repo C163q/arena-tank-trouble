@@ -76,6 +76,12 @@ impl Maze {
         crate::collision::sweep_maze(self, from, to - from, radius).map(|hit| hit.time)
     }
 
+    /// Contact fraction and reflected displacement for a swept projectile.
+    pub fn first_bounce(&self, start: Vec2, delta: Vec2, radius: f64) -> Option<(f64, Vec2)> {
+        crate::collision::sweep_maze(self, start, delta, radius)
+            .map(|hit| (hit.time, hit.reflect(delta)))
+    }
+
     pub fn generate(seed: u64) -> (Self, [Pose; 2]) {
         let (maze, spawns) = Self::generate_for_players(seed, 2);
         (maze, spawns.try_into().expect("two spawns"))

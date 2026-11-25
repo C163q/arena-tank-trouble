@@ -11,6 +11,12 @@ python3 scripts/selftest.py run --out runs/quick
 
 `run` 用同一张迷宫打两局，第二局互换出生位。加 `--seed 408` 可以换一张图。先看 `summary.md` 的各局得分，再看回放找出坦克被卡住、错过射击或没及时躲进安全区的位置。
 
+打赢基础档后，可以用挑战档检验策略。挑战 Bot 会争夺中心位置，也会利用墙面反弹开火。
+
+```sh
+python3 scripts/selftest.py run --opponent challenge --out runs/challenge
+```
+
 ## 看一局
 
 - 在浏览器打开 `match-0001/replay.html`，可以暂停、调倍速和拖动进度条。

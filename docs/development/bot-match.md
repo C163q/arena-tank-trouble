@@ -25,8 +25,10 @@ cargo run --locked -p arena-runner -- --seed 407 --out .tmp/my-match demo demo d
 在 Linux 上构建后，把 `./target/release/libarena_baseline_bot.so` 当作普通 Bot 路径传给裁判或测评脚本。[基准 Bot 源码](../../crates/arena-baseline-bot/src/lib.rs) · [批量测评示例](league.md#与基准-bot-对比)
 
 ```sh
-cargo build --locked --release -p arena-runner -p arena-baseline-bot
+cargo build --locked --release -p arena-runner -p arena-baseline-bot -p arena-challenge-bot
 ```
+
+挑战档位于 `target/release/libarena_challenge_bot.so`，可以传给同一裁判或测评脚本。它沿最短路径向中心靠拢，搜索可达朝向上的直射与反弹射线，使用连续观测估计敌方位置，并根据弹丸反弹后的路径选择避让动作。[挑战 Bot 源码](../../crates/arena-challenge-bot/src/lib.rs)
 
 ## 逐步文本与通用播放器
 

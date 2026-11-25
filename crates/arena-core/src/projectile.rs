@@ -94,11 +94,7 @@ impl Projectile {
                 if self.contacts >= contact_limit {
                     return Some(Impact::Expired);
                 }
-                self.direction = if hit.corner {
-                    self.direction.scale(-1.0)
-                } else {
-                    self.direction - hit.normal.scale(2.0 * self.direction.dot(hit.normal))
-                };
+                self.direction = hit.reflect(self.direction);
                 distance *= 1.0 - hit.time;
             } else {
                 self.record_move(delta, &mut record);

@@ -23,7 +23,8 @@ TEMPLATE_FILES = (
     "README.md", "AGENTS.md", "docs/rules.md", "docs/api.md", "docs/testing.md",
     "scripts/selftest.py", "starter/bot.c",
 )
-BUILD_FILES = ("arena-runner", "libarena_baseline_bot.so", "fff-timer-query", "fff-timer")
+BOT_LIBS = ("libarena_baseline_bot.so", "libarena_challenge_bot.so")
+BUILD_FILES = ("arena-runner", *BOT_LIBS, "fff-timer-query", "fff-timer")
 
 
 def sha256(path):
@@ -41,7 +42,7 @@ def build(offline):
     env["CARGO_ENCODED_RUSTFLAGS"] = "\x1f".join(("-C", "opt-level=3", "-C", "debuginfo=0", "-C", "strip=symbols"))
     command = [
         "cargo", "build", "--locked", "--release", "--target", TARGET,
-        "-p", "arena-runner", "-p", "arena-baseline-bot", "-p", "fff-session-timer",
+        "-p", "arena-runner", "-p", "arena-baseline-bot", "-p", "arena-challenge-bot", "-p", "fff-session-timer",
     ]
     if offline:
         command.append("--offline")
@@ -91,7 +92,8 @@ def assemble(output, artifacts, glibc_min):
             copy(ROOT / name, participant / name)
         for name in ("arena-runner", "fff-timer-query"):
             copy(artifacts / name, participant / "bin" / name, executable=True)
-        copy(artifacts / "libarena_baseline_bot.so", participant / "lib/libarena_baseline_bot.so")
+        for name in BOT_LIBS:
+            copy(artifacts / name, participant / "lib" / name)
         copy(artifacts / "fff-timer", deliverable / "fff-timer", executable=True)
         copy(ROOT / "LICENSE", deliverable / "LICENSE")
         files = {

@@ -52,14 +52,16 @@ def verify(kit, out):
         "starter/bot.c", "-o", "submission/libteam.so")
     selftest = [sys.executable, "scripts/selftest.py"]
     run(work, *selftest, "check", "--out", "runs/check")
-    run(work, *selftest, "run", "--out", "runs/quick")
-    quick = json.loads((work / "runs/quick/summary.json").read_text())
-    assert quick["completed"] == 2 and not quick["failed"]
-    first, second = quick["matches"]
-    assert first["seed"] == second["seed"]
-    assert first["seats"] == second["seats"][::-1]
-    for match in quick["matches"]:
-        assert (work / "runs/quick" / match["replay_html"]).is_file()
+    for name, options in [("baseline", []), ("challenge", ["--opponent", "challenge"])]:
+        run(work, *selftest, "run", *options, "--out", f"runs/{name}")
+        quick = json.loads((work / f"runs/{name}/summary.json").read_text())
+        assert quick["completed"] == 2 and not quick["failed"]
+        assert quick["bots"][1]["name"] == f"libarena_{name}_bot"
+        first, second = quick["matches"]
+        assert first["seed"] == second["seed"]
+        assert first["seats"] == second["seats"][::-1]
+        for match in quick["matches"]:
+            assert (work / f"runs/{name}" / match["replay_html"]).is_file()
 
     (work / "bad.c").write_text(
         (work / "starter/bot.c").read_text().replace("return 0;", "return UINT32_MAX;")
@@ -68,7 +70,7 @@ def verify(kit, out):
         "bad.c", "-o", "bad.so")
     run(work, *selftest, "check", "--bot", "./bad.so", "--out", "runs/invalid", expected=1)
     assert (work / "runs/invalid/replay.json").is_file()
-    print(f"Contest kit: manifest, C starter, preflight, rejected action, and two replays verified in {out}")
+    print(f"Contest kit: manifest, C starter, preflight, rejected action, and both benchmark seat swaps verified in {out}")
 
 
 if __name__ == "__main__":
