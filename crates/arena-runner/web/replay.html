@@ -9,8 +9,27 @@
 body { margin: 0; }
 main { max-width: 64rem; margin: auto; padding: 1.25rem; }
 h1 { margin: 0 0 .8rem; font-size: 1.5rem; }
-.drop-zone { display: flex; flex-wrap: wrap; align-items: center; gap: .5rem 1rem; padding: .65rem .8rem; border: 1px dashed #7e9087; border-radius: .5rem; margin-bottom: .8rem; }
-.drop-zone input { max-width: 100%; font: inherit; }
+.drop-zone {
+  display: grid; justify-items: center; align-content: center; gap: .55rem;
+  box-sizing: border-box; min-height: 12rem; padding: 1rem; margin-bottom: .8rem;
+  border: 2px dashed #7e9087; border-radius: .6rem; background: #f3f5ef; text-align: center;
+}
+.drop-zone.has-replay { min-height: 7rem; }
+.drop-zone p { margin: 0; }
+.drop-title { font-size: 1.15rem; font-weight: 650; }
+.drop-formats { color: #4c6259; }
+#open-replay { position: absolute; width: 1px; height: 1px; opacity: 0; }
+.choose-file {
+  border: 1px solid #7e9087; border-radius: .35rem; padding: .3rem .7rem;
+  background: #e6e9e3; cursor: pointer;
+}
+#open-replay:focus-visible + .choose-file { outline: 2px solid #24694f; outline-offset: 3px; }
+#drop-overlay {
+  position: fixed; z-index: 1; inset: 1rem; display: grid; place-items: center;
+  border: 3px dashed #24694f; border-radius: .75rem; background: #e6f0e8ee;
+  color: #245342; font-size: 1.35rem; font-weight: 650; text-align: center; pointer-events: none;
+}
+#drop-overlay[hidden] { display: none; }
 #file-status { margin: 0 0 .8rem; overflow-wrap: anywhere; }
 #file-status:empty { display: none; }
 #file-status.error { color: #8b3427; }
@@ -28,11 +47,13 @@ td, th { padding: .32rem .2rem; border-bottom: 1px solid #bec7be; overflow-wrap:
 <body>
 <main>
 <h1>坦克对局回放</h1>
-<label class="drop-zone" for="open-replay">
-  <span>拖入或选择 replay.json / timeline.jsonl</span>
+<div class="drop-zone">
+  <p class="drop-title">拖入回放文件</p>
+  <p class="drop-formats"><code>replay.json</code> 或 <code>timeline.jsonl</code></p>
   <input id="open-replay" type="file" accept=".json,.jsonl,application/json,application/x-ndjson">
-</label>
-<p id="file-status" role="status"></p>
+  <label class="choose-file" for="open-replay">选择文件</label>
+</div>
+<p id="file-status" role="status">正在启动播放器。如果此提示一直存在，请在浏览器中直接打开此 HTML 文件。</p>
 <section id="match" aria-label="回放" hidden>
 <canvas aria-label="对局画面"></canvas>
 <div class="controls">
@@ -49,6 +70,7 @@ td, th { padding: .32rem .2rem; border-bottom: 1px solid #bec7be; overflow-wrap:
 </table>
 </section>
 </main>
+<div id="drop-overlay" hidden aria-hidden="true">松开以导入回放</div>
 <!-- REPLAY_SCRIPT -->
 </body>
 </html>

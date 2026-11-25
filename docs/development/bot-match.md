@@ -14,6 +14,8 @@ cargo run --locked -p arena-runner -- --seed 407 --out .tmp/my-match demo demo d
 
 ## 逐步文本与通用播放器
 
+`replay.json` 将全局和每帧数据放在一个 JSON 对象中，各字段使用完整名称，适合程序直接读取。`timeline.jsonl` 从同一份裁判帧导出，为逐行查看和 AI 分析压缩了重复字段。两种文件使用相同的裁判帧和结算结果。
+
 `timeline.jsonl` 是供分析使用的 UTF-8 文本。首行包含地图、种子、规则和 `columns` 列定义。从第二行开始，每个模拟步一条 JSON 记录，最后一行是本场结果和分项积分。坦克与动作按席位顺序排列。第 0 步是初始局面，之后的第 `t` 行描述推进到第 `t` 步后的真实状态，`decisions` 记录推进到这一帧采用的操作。动作用 W/S/A/D/F 表示，F 表示开火，短横线表示空操作。
 
 坐标以格为单位，角度用弧度，速度为格每秒。`owner` 是原发射席位，`eliminations` 记录淘汰坦克和发射者的席位号。动作状态还能辨认超时和其他错误。可按行截取所需模拟步，附上首行的列定义交给 AI 分析。
@@ -21,10 +23,10 @@ cargo run --locked -p arena-runner -- --seed 407 --out .tmp/my-match demo demo d
 在仓库根目录运行以下命令生成单独的页面。也可直接打开任意对局的 `replay.html`，两种页面都接受文件导入。
 
 ```sh
-cargo run --locked -p arena-runner -- viewer --out .tmp/viewer.html
+cargo run --locked -p arena-runner -- viewer --out runs/viewer.html
 ```
 
-把 `replay.json` 或 `timeline.jsonl` 拖入页面，或用文件选择框打开。播放器从第 0 步开始显示所选对局，并保留原先打开的回放直到新文件通过校验。
+用浏览器直接打开生成的 HTML，从文件管理器把 `replay.json` 或 `timeline.jsonl` 拖到页面任意位置，也可点击「选择文件」。播放器从第 0 步开始显示所选对局，并保留原先打开的回放直到新文件通过校验。
 
 ## 编写 C ABI bot
 

@@ -255,7 +255,31 @@ def verify_browser(replay_path, screenshot, binary):
         open_replay = viewer.locator("#open-replay")
         status = viewer.locator("#file-status")
         slider = viewer.locator("#seek")
-        open_replay.set_input_files(str(replay_path.with_name("replay.json")))
+        viewer.evaluate(
+            """() => {
+              const dataTransfer = new DataTransfer();
+              dataTransfer.setData("text/uri-list", "file:///replay.json");
+              document.body.dispatchEvent(new DragEvent("drop", {bubbles: true, cancelable: true, dataTransfer}));
+            }"""
+        )
+        expect(status).to_contain_text("从文件管理器拖入")
+        zone = viewer.locator(".drop-zone")
+        box = zone.bounding_box()
+        assert box["height"] >= 160
+        expect(viewer.get_by_text("选择文件", exact=True)).to_be_visible()
+        drag = context.new_cdp_session(viewer)
+
+        def drop_file(name, x, y):
+            data = {"files": [str(replay_path.with_name(name).resolve())],
+                    "items": [], "dragOperationsMask": 1}
+            location = {"x": x, "y": y, "data": data}
+            for event in ("dragEnter", "dragOver"):
+                drag.send("Input.dispatchDragEvent", {"type": event, **location})
+            expect(viewer.locator("#drop-overlay")).to_be_visible()
+            drag.send("Input.dispatchDragEvent", {"type": "drop", **location})
+            expect(viewer.locator("#drop-overlay")).to_be_hidden()
+
+        drop_file("replay.json", box["x"] + 40, box["y"] + 40)
         expect(status).to_have_text("已载入 replay.json")
         expect(viewer.locator("#scoreboard tr")).to_have_count(4)
         starting_canvas = viewer.locator("canvas").evaluate("(canvas) => canvas.toDataURL()")
@@ -263,17 +287,15 @@ def verify_browser(replay_path, screenshot, binary):
         viewer.keyboard.press("End")
         expect(slider).to_have_value(slider.get_attribute("max"))
 
-        viewer.evaluate(
-            """text => {
-              const dataTransfer = new DataTransfer();
-              dataTransfer.items.add(new File([text], "timeline.jsonl", {type: "application/x-ndjson"}));
-              document.body.dispatchEvent(new DragEvent("drop", {bubbles: true, cancelable: true, dataTransfer}));
-            }""",
-            replay_path.with_name("timeline.jsonl").read_text(encoding="utf-8"),
-        )
+        canvas_box = viewer.locator("canvas").bounding_box()
+        drop_file("timeline.jsonl", canvas_box["x"] + 40, canvas_box["y"] + 40)
         expect(status).to_have_text("已载入 timeline.jsonl")
         expect(slider).to_have_value("0")
         assert viewer.locator("canvas").evaluate("(canvas) => canvas.toDataURL()") == starting_canvas
+        with viewer.expect_file_chooser() as chooser:
+            viewer.get_by_text("选择文件", exact=True).click()
+        chooser.value.set_files(str(replay_path.with_name("replay.json")))
+        expect(status).to_have_text("已载入 replay.json")
         extended = json.loads(replay_path.with_name("replay.json").read_bytes())
         extended["frames"][0]["walls"] = None
         open_replay.set_input_files({

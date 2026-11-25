@@ -7,11 +7,14 @@ const speed = document.querySelector("#speed");
 const scoreboard = document.querySelector("#scoreboard");
 const fileStatus = document.querySelector("#file-status");
 const input = document.querySelector("#open-replay");
+const dropZone = document.querySelector(".drop-zone");
+const dropOverlay = document.querySelector("#drop-overlay");
 let replay;
 let position = 0;
 let previous = null;
 let animation = 0;
 let loadId = 0;
+let dragDepth = 0;
 
 function decodeFrame(record) {
   const { tick, tanks, projectiles, pickups, laser_trails } = record;
@@ -115,6 +118,7 @@ function load(data) {
     }
   });
   match.hidden = false;
+  dropZone.classList.add("has-replay");
   show();
 }
 
@@ -173,20 +177,23 @@ seek.addEventListener("input", () => {
 speed.addEventListener("change", () => { previous = null; });
 new ResizeObserver(show).observe(canvas);
 
+function setFileStatus(message, error = false) {
+  fileStatus.textContent = message;
+  fileStatus.classList.toggle("error", error);
+}
+
 async function openFile(file) {
   if (!file) return;
   const id = ++loadId;
-  fileStatus.classList.remove("error");
-  fileStatus.textContent = "正在读取 " + file.name;
+  setFileStatus("正在读取 " + file.name);
   try {
     const text = (await file.text()).trim();
     if (id !== loadId) return;
     load(parseReplay(text));
-    fileStatus.textContent = "已载入 " + file.name;
+    setFileStatus("已载入 " + file.name);
   } catch {
     if (id !== loadId) return;
-    fileStatus.textContent = "无法载入 " + file.name + "，请检查回放格式和文件完整性。";
-    fileStatus.classList.add("error");
+    setFileStatus("无法载入 " + file.name + "，请检查回放格式和文件完整性。", true);
   }
 }
 
@@ -195,17 +202,60 @@ input.addEventListener("change", () => {
   input.value = "";
   openFile(file);
 });
-window.addEventListener("dragover", (event) => {
-  if (event.dataTransfer.types.includes("Files")) event.preventDefault();
-});
-window.addEventListener("drop", (event) => {
-  const file = event.dataTransfer.files[0];
-  if (!file) return;
+function hasFiles(transfer) {
+  return transfer?.files?.length > 0
+    || Array.from(transfer?.types ?? []).includes("Files")
+    || Array.from(transfer?.items ?? []).some((item) => item.kind === "file");
+}
+
+function hasText(transfer) {
+  return Array.from(transfer?.types ?? []).some((type) =>
+    ["text/uri-list", "text/plain", "text/html", "text/x-moz-url"].includes(type));
+}
+
+function clearDrag() {
+  dragDepth = 0;
+  dropOverlay.hidden = true;
+}
+
+window.addEventListener("dragenter", (event) => {
+  if (!hasFiles(event.dataTransfer)) return;
   event.preventDefault();
-  openFile(file);
+  dragDepth += 1;
+  dropOverlay.hidden = false;
+});
+window.addEventListener("dragover", (event) => {
+  if (hasFiles(event.dataTransfer)) {
+    event.preventDefault();
+    event.dataTransfer.dropEffect = "copy";
+    dropOverlay.hidden = false;
+  } else if (hasText(event.dataTransfer)) {
+    event.preventDefault();
+  }
+});
+window.addEventListener("dragleave", () => {
+  if (dragDepth > 0) dragDepth -= 1;
+  if (dragDepth === 0) clearDrag();
+});
+window.addEventListener("dragend", clearDrag);
+window.addEventListener("drop", (event) => {
+  clearDrag();
+  const transfer = event.dataTransfer;
+  if (!hasFiles(transfer) && !hasText(transfer)) return;
+  event.preventDefault();
+  const file = transfer.files?.[0]
+    ?? Array.from(transfer.items ?? []).find((item) => item.kind === "file")?.getAsFile();
+  if (file) {
+    openFile(file);
+  } else {
+    ++loadId;
+    setFileStatus("请从文件管理器拖入回放文件，或点击「选择文件」。", true);
+  }
 });
 
 const embedded = document.querySelector("#replay-data");
 if (embedded) {
   load(parseReplay(embedded.textContent));
 }
+
+setFileStatus("");
