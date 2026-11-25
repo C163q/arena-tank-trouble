@@ -24,7 +24,8 @@ fn main() -> Result<(), Box<dyn Error>> {
         Some("--worker") => {
             args.next();
             let path = args.next().ok_or("missing worker library")?;
-            return Ok(native::serve(Path::new(&path))?);
+            let referee = number("--worker referee PID", args.next())?;
+            return Ok(native::serve(Path::new(&path), referee)?);
         }
         _ => {}
     }

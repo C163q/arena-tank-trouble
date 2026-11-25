@@ -27,6 +27,9 @@ fn observation_delays_every_dynamic_object_except_own_tank() {
         let past = tick.saturating_sub(12);
         assert_eq!(view.tick, tick);
         assert_eq!(view.world_tick, past);
+        assert_eq!(view.max_ticks, config.max_ticks);
+        assert_eq!(view.kill_points, config.kill_points);
+        assert_eq!(view.survival_points, config.survival_points);
         assert_eq!(view.own_tank, &history[tick as usize].tanks[0]);
         assert_eq!(view.other_tanks[0].tank, &history[past as usize].tanks[1]);
         assert_eq!(view.projectiles, history[past as usize].projectiles);

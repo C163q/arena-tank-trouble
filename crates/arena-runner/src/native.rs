@@ -85,6 +85,7 @@ impl Process {
         let child = Command::new(std::env::current_exe()?)
             .arg("--worker")
             .arg(library)
+            .arg(std::process::id().to_string())
             .stdin(Stdio::from(OwnedFd::from(child)))
             .process_group(0)
             .spawn()?;
@@ -280,7 +281,15 @@ impl Drop for Library {
     }
 }
 
-pub fn serve(path: &Path) -> io::Result<()> {
+pub fn serve(path: &Path, referee: u32) -> io::Result<()> {
+    // SAFETY: PR_SET_PDEATHSIG sets only the worker's death signal.
+    if unsafe { libc::prctl(libc::PR_SET_PDEATHSIG, libc::SIGKILL, 0, 0, 0) } == -1 {
+        return Err(io::Error::last_os_error());
+    }
+    // SAFETY: getppid has no arguments and reports the current parent.
+    if (unsafe { libc::getppid() }) as u32 != referee {
+        return Err(io::Error::other("bot referee already exited"));
+    }
     // SAFETY: PR_SET_DUMPABLE changes only this worker's dump policy.
     if unsafe { libc::prctl(libc::PR_SET_DUMPABLE, 0, 0, 0, 0) } == -1 {
         return Err(io::Error::last_os_error());

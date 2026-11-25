@@ -4,7 +4,10 @@ import argparse
 import json
 import os
 from pathlib import Path
+import resource
+import select
 import shutil
+import signal
 import subprocess
 import tempfile
 
@@ -17,6 +20,7 @@ C_SOURCE = r"""
 #include <stdlib.h>
 #include <string.h>
 #include <time.h>
+#include <unistd.h>
 
 uint32_t arena_bot_abi_version(void) {
     return ARENA_BOT_ABI_VERSION + WRONG_ABI;
@@ -33,6 +37,11 @@ uint32_t arena_bot_decide(const uint8_t *observation, size_t len) {
     }
     if (KIND == 3) {
         abort();
+    }
+    if (KIND == 5) {
+        printf("%ld\n", (long)getpid());
+        fflush(stdout);
+        for (;;) pause();
     }
     if (KIND == 4) {
         static unsigned tick = 0;
@@ -77,6 +86,29 @@ def run_match(binary, out, *bots, max_ticks=3600, seed=407, kill=1, survival=1, 
     return outcome
 
 
+def verify_referee_exit(binary, path, idle):
+    blocked = fixture(path, "blocked", kind=5)
+    command = [str(binary), "--out", str(path / "interrupted"), str(blocked), str(idle)]
+    with subprocess.Popen(command, text=True, stdout=subprocess.PIPE) as referee:
+        worker_handle = None
+        try:
+            assert select.select([referee.stdout], [], [], 3)[0], "worker did not enter its call"
+            worker_handle = os.pidfd_open(int(referee.stdout.readline()))
+            referee.kill()
+            referee.wait(timeout=3)
+            assert select.select([worker_handle], [], [], 2)[0], "worker survived referee shutdown"
+        finally:
+            if referee.poll() is None:
+                referee.kill()
+            if worker_handle is not None:
+                try:
+                    signal.pidfd_send_signal(worker_handle, signal.SIGKILL)
+                except ProcessLookupError:
+                    pass
+                finally:
+                    os.close(worker_handle)
+
+
 def verify_native(binary, path):
     idle = fixture(path, "idle")
     shooter = fixture(path, "observes", kind=4)
@@ -109,6 +141,20 @@ def verify_native(binary, path):
     bad = run_match(binary, path / "bad", wrong_abi, idle, check=False)
     assert "unsupported bot ABI version" in bad.stderr
     assert not (path / "bad").exists()
+    verify_referee_exit(binary, path, idle)
+
+
+def verify_failed_export(binary, path):
+    def limit_output():
+        signal.signal(signal.SIGXFSZ, signal.SIG_IGN)
+        resource.setrlimit(resource.RLIMIT_FSIZE, (512, 512))
+
+    out = path / "failed-export"
+    command = [str(binary), "--out", str(out), "--max-ticks", "1", "demo", "demo"]
+    result = subprocess.run(command, capture_output=True, timeout=5, preexec_fn=limit_output)
+    assert result.returncode != 0
+    assert not out.exists(), "failed export published a partial file"
+    assert not list(path.glob(".arena-replay-*"))
 
 
 def verify_browser(replay_path, screenshot):
@@ -159,6 +205,7 @@ def main():
     binary = args.binary.resolve()
     with tempfile.TemporaryDirectory(prefix="arena-native-") as work:
         verify_native(binary, Path(work))
+        verify_failed_export(binary, Path(work))
     data = run_match(binary, args.artifacts, *["demo"] * 4, seed=DEMO_SEED)
     assert data["result"]["reason"] == "winner"
     assert len(data["seats"]) == 4 and data["observation_delay_ticks"] == 12

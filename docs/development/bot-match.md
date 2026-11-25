@@ -8,7 +8,7 @@
 cargo run --locked -p arena-runner -- --seed 407 --out .tmp/my-match demo demo demo demo
 ```
 
-输出目录必须尚未存在。比赛结束后会写入 `replay.html` 和 `replay.json`。直接在浏览器打开 HTML 即可离线播放，支持暂停、倍速和进度跳转。1 倍速每秒推进 60 个真实游戏帧。JSON 保留规则、地图、每步局面及实际采用的动作、出局事件、积分和最终结果。示例控制器用于跑通流程。
+输出目录必须尚未存在。比赛结束后会一同生成 `replay.html` 和 `replay.json`。直接在浏览器打开 HTML 即可离线播放，支持暂停、倍速和进度跳转。1 倍速每秒推进 60 个真实游戏帧。JSON 保留规则、地图、每步局面及实际采用的动作、出局事件、积分和最终结果。示例控制器用于跑通流程。
 
 只剩一辆坦克时继续模拟 120 步，撑到结算的坦克获胜。全灭则平局。裁判默认模拟到 3600 步，若已进入胜负等待则完成剩余结算步。仍有多辆坦克时到达步数上限，计时平局。可以用 `--max-ticks` 调整上限。击杀分给原发射席位，自杀零分。存活分只给最终胜者。两项各默认 1 分，分别用 `--kill-points` 和 `--survival-points` 调整。
 
@@ -30,6 +30,7 @@ cargo run --locked -p arena-runner -- --out .tmp/native-match ./my_bot.so demo
 | `seat` | 自身席位，从 0 编号 |
 | `tick`、`world_tick` | 当前模拟步和所见世界步，分别从 0 编号 |
 | `ticks_per_second`、`decision_budget_ms` | 步频 60，本次墙钟预算 |
+| `max_ticks`、`kill_points`、`survival_points` | 模拟步上限和本场两项计分权重 |
 | `map`、`geometry`、`params` | 固定地图及墙体、物体尺寸和规则参数，位置单位为格 |
 | `own_tank` | 当前自身坦克的朝向、位置、弹量、下次补弹步及装填道具 |
 | `other_tanks` | 延迟世界中的其他坦克，附席位号和存活状态 |
@@ -41,7 +42,7 @@ cargo run --locked -p arena-runner -- --out .tmp/native-match ./my_bot.so demo
 
 ## 验证入口
 
-头文件的真实编译和动态加载测试覆盖了首步与后续时限、崩溃、非法返回和错误版本。离线查看器测试需要 Python Playwright 和 Chromium，可通过 `ARENA_CHROMIUM` 指定浏览器路径。
+头文件的真实编译和动态加载测试覆盖了首步与后续时限、崩溃、非法返回、错误版本和裁判退出时终止活跃 worker。验收脚本需要带 pidfd 支持的 Linux、Python 3.9 以上和 C 编译器。离线查看器测试还需要 Python Playwright 和 Chromium，可通过 `ARENA_CHROMIUM` 指定浏览器路径。
 
 ```sh
 cargo test --workspace --locked
