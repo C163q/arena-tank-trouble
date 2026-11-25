@@ -1,3 +1,5 @@
 /docs/local.md
 /.tmp/
 /.worktrees/
+
+/target/
