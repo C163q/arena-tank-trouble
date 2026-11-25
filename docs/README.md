@@ -23,5 +23,6 @@
 | `docs/superpowers/specs/` | Superpowers 设计规格，文件名为 `YYYY-MM-DD-<topic>-design.md`。 |
 | `docs/superpowers/plans/` | Superpowers 实施计划，文件名为 `YYYY-MM-DD-<feature-name>.md`。 |
 | `docs/local.md` | 本机环境记录，包括工具版本、工作区路径和本地参考项目。由各开发者在本机维护，Git 忽略此文件。 |
+| `runs/` | 本地测评、回放和结果输出。Git 忽略此目录。 |
 | `.tmp/` | 需要跨重启保留的本地临时文件，Git 忽略此目录。 |
 | `.worktrees/` | 本地 Git 工作树的存放位置，Git 忽略此目录。 |

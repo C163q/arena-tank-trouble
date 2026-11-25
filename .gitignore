@@ -1,5 +1,6 @@
 /docs/local.md
 /.tmp/
 /.worktrees/
+/runs/
 
 /target/

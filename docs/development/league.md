@@ -5,7 +5,7 @@
 ```sh
 cargo build --locked -p arena-runner
 python3 scripts/league.py --matches 12 --jobs 2 --players 3 --seed 407 \
-  --out .tmp/my-league ./alpha.so ./beta.so ./gamma.so
+  --out runs/my-league ./alpha.so ./beta.so ./gamma.so
 ```
 
 可以用 `demo` 替换任一库以跑通流程。输入顺序决定总榜中稳定的 bot 编号。同名文件也按编号区分。默认每局最多 4 个席位。输入池超过单局席数时，工具优先选出场少的 bot，同等出场时优先减少重复同场。每组复用同一张地图轮换出生位。总局数不足以完整轮换时，末组在指定局数结束。固定同一种子、输入顺序、人数和局数可重建赛程。
