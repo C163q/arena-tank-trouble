@@ -291,6 +291,6 @@ mod tests {
         assert_eq!(second.tick()["tanks"][0]["ammo"], 5);
         first.receive(&restart(0, "new", 2.0)).unwrap();
         assert_eq!(second.state()["seed"], "42");
-        assert_eq!(second.state()["params"]["reload_secs"], 5.0);
+        assert_eq!(second.state()["params"]["reload_secs"], 3.0);
     }
 }

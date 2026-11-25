@@ -95,7 +95,7 @@ def test_keyboard_hit_and_restart(page, url):
         "forward_secs": 0.45,
         "reverse_secs": 0.45,
         "turn_secs": 1.5,
-        "reload_secs": 5.0,
+        "reload_secs": 3.0,
         "wall_contacts": 10,
     }
     assert initial["geometry"]["tank_length"] == 0.42

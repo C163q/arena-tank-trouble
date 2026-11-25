@@ -284,16 +284,16 @@ mod tests {
         }
         fire(&mut round);
         assert_eq!(round.view().projectiles.len(), 5);
-        idle(&mut round, 294);
+        idle(&mut round, 174);
         assert_eq!(round.view().tanks[0].ammo, 0);
         idle(&mut round, 1);
         assert_eq!(round.view().tanks[0].ammo, 1);
-        idle(&mut round, 300);
+        idle(&mut round, 180);
         assert_eq!(round.view().tanks[0].ammo, 2);
-        idle(&mut round, 1200);
+        idle(&mut round, 540);
         assert_eq!(round.view().tanks[0].ammo, 5);
         fire(&mut round);
-        idle(&mut round, 299);
+        idle(&mut round, 179);
         assert_eq!(round.view().tanks[0].ammo, 4);
         idle(&mut round, 1);
         assert_eq!(round.view().tanks[0].ammo, 5);

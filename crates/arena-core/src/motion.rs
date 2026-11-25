@@ -29,7 +29,7 @@ impl Default for Params {
             forward_secs: 0.45,
             reverse_secs: 0.45,
             turn_secs: 1.5,
-            reload_secs: 5.0,
+            reload_secs: 3.0,
             wall_contacts: 10,
         }
     }
@@ -382,7 +382,7 @@ mod tests {
         assert_eq!(params.forward_secs, 0.45);
         assert_eq!(params.reverse_secs, 0.45);
         assert_eq!(params.turn_secs, 1.5);
-        assert_eq!(params.reload_secs, 5.0);
+        assert_eq!(params.reload_secs, 3.0);
         assert_eq!(params.wall_contacts, 10);
     }
 
