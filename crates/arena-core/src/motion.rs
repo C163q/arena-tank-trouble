@@ -21,6 +21,12 @@ pub struct Params {
     pub turn_secs: f64,
     pub reload_secs: f64,
     pub wall_contacts: u8,
+    #[cfg_attr(feature = "serde", serde(default = "default_laser_trail_secs"))]
+    pub laser_trail_secs: f64,
+}
+
+fn default_laser_trail_secs() -> f64 {
+    0.20
 }
 
 impl Default for Params {
@@ -31,6 +37,7 @@ impl Default for Params {
             turn_secs: 1.5,
             reload_secs: 3.0,
             wall_contacts: 10,
+            laser_trail_secs: default_laser_trail_secs(),
         }
     }
 }
@@ -42,6 +49,7 @@ impl Params {
             (self.reverse_secs, 0.15..=3.0, "reverse_secs"),
             (self.turn_secs, 0.25..=6.0, "turn_secs"),
             (self.reload_secs, 0.2..=10.0, "reload_secs"),
+            (self.laser_trail_secs, 0.05..=2.00, "laser_trail_secs"),
         ] {
             if !bounds.contains(&value) {
                 return Err(field);
@@ -396,6 +404,7 @@ mod tests {
                 turn_secs: 0.25,
                 reload_secs: 0.2,
                 wall_contacts: 1,
+                laser_trail_secs: 0.05,
             },
             Params {
                 forward_secs: 3.0,
@@ -403,6 +412,7 @@ mod tests {
                 turn_secs: 6.0,
                 reload_secs: 10.0,
                 wall_contacts: 20,
+                laser_trail_secs: 2.00,
             },
         ] {
             assert!(params.validate().is_ok());
@@ -422,6 +432,14 @@ mod tests {
             },
             Params {
                 reload_secs: 10.1,
+                ..Params::default()
+            },
+            Params {
+                laser_trail_secs: 0.04,
+                ..Params::default()
+            },
+            Params {
+                laser_trail_secs: 2.01,
                 ..Params::default()
             },
             Params {
