@@ -91,6 +91,15 @@ def open_playtest(page, url):
 def test_keyboard_hit_and_restart(page, url):
     wire = open_playtest(page, url)
     initial = wire.states[-1]
+    assert initial["params"] == {
+        "forward_secs": 0.45,
+        "reverse_secs": 0.45,
+        "turn_secs": 1.5,
+        "reload_secs": 5.0,
+        "wall_contacts": 10,
+    }
+    assert initial["geometry"]["tank_length"] == 0.42
+    assert initial["geometry"]["tank_width"] == 0.34
     spawn = player_pose(initial)
     page.keyboard.down("w")
     moved = wire.wait_for(lambda s: player_pose(s)["position"] != spawn["position"], "forward movement")

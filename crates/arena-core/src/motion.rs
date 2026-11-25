@@ -1,7 +1,7 @@
 use std::f64::consts::{PI, TAU};
 
-use crate::collision::{sweep_circle, sweep_maze};
-use crate::{Maze, Pose, TANK_RADIUS, TICKS_PER_SECOND, Vec2};
+use crate::hull::Hull;
+use crate::{Maze, Pose, TANK_LENGTH, TANK_WIDTH, TICKS_PER_SECOND, Vec2, WALL_THICKNESS, Wall};
 
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
 pub struct Action {
@@ -26,10 +26,10 @@ impl Default for Params {
     fn default() -> Self {
         Self {
             forward_secs: 0.45,
-            reverse_secs: 0.65,
+            reverse_secs: 0.45,
             turn_secs: 1.5,
-            reload_secs: 1.0,
-            wall_contacts: 5,
+            reload_secs: 5.0,
+            wall_contacts: 10,
         }
     }
 }
@@ -55,25 +55,48 @@ impl Params {
 
 pub fn drive(maze: &Maze, mut pose: Pose, other: Pose, action: Action, params: &Params) -> Pose {
     let turn = f64::from(i8::from(action.turn_right) - i8::from(action.turn_left));
-    if turn != 0.0 {
-        let angle = pose.angle + turn * TAU / (params.turn_secs * f64::from(TICKS_PER_SECOND));
-        pose.angle = (angle + PI).rem_euclid(TAU) - PI;
-    }
     let speed = match (action.forward, action.reverse) {
         (true, false) => 1.0 / params.forward_secs,
         (false, true) => -1.0 / params.reverse_secs,
-        _ => return pose,
+        _ => 0.0,
     };
-    let delta = Vec2::from_angle(pose.angle).scale(speed / f64::from(TICKS_PER_SECOND));
-    let wall = sweep_maze(maze, pose.position, delta, TANK_RADIUS);
-    let tank = sweep_circle(pose.position, delta, other.position, 2.0 * TANK_RADIUS);
-    let fraction = wall
-        .into_iter()
-        .chain(tank)
-        .map(|hit| hit.time)
-        .fold(1.0, f64::min);
-    pose.position = pose.position + delta.scale(fraction);
+    if turn == 0.0 && speed == 0.0 {
+        return pose;
+    }
+    let travel = speed / f64::from(TICKS_PER_SECOND);
+    let reach = TANK_LENGTH.hypot(TANK_WIDTH) / 2.0 + WALL_THICKNESS / 2.0 + travel.abs();
+    let walls: Vec<_> = maze
+        .walls
+        .iter()
+        .copied()
+        .filter(|wall| near(wall, pose.position, reach))
+        .collect();
+    let other = Hull::new(other);
+
+    if turn != 0.0 {
+        let change = turn * TAU / (params.turn_secs * f64::from(TICKS_PER_SECOND));
+        let available_turn = Hull::new(pose).turn_fraction(change, &walls, other);
+        let angle = pose.angle + change * available_turn;
+        pose.angle = (angle + PI).rem_euclid(TAU) - PI;
+    }
+    if speed != 0.0 {
+        let movement = Vec2::from_angle(pose.angle).scale(travel);
+        let hull = Hull::new(pose);
+        let fraction = walls
+            .into_iter()
+            .filter_map(|wall| hull.wall_contact(movement, wall))
+            .chain(hull.hull_contact(movement, other))
+            .fold(1.0, f64::min);
+        pose.position = pose.position + movement.scale(fraction);
+    }
     pose
+}
+
+fn near(wall: &Wall, center: Vec2, reach: f64) -> bool {
+    let a = wall.a;
+    let b = wall.b;
+    (a.x.min(b.x) - reach..=a.x.max(b.x) + reach).contains(&center.x)
+        && (a.y.min(b.y) - reach..=a.y.max(b.y) + reach).contains(&center.y)
 }
 
 #[cfg(test)]
@@ -131,7 +154,7 @@ mod tests {
         );
         assert!(reverse.angle < 0.0);
         assert!(
-            ((reverse.position.x - 0.5).hypot(reverse.position.y - 0.5) - 1.0 / 39.0).abs() < 1e-9
+            ((reverse.position.x - 0.5).hypot(reverse.position.y - 0.5) - 1.0 / 27.0).abs() < 1e-9
         );
 
         let opposite = Action {
@@ -144,7 +167,7 @@ mod tests {
         assert_eq!(drive(&maze, pose, other, opposite, &params), pose);
 
         let against_wall = Pose {
-            position: Vec2::new(0.73, 0.5),
+            position: Vec2::new(0.75, 0.5),
             angle: 0.0,
         };
         let forward_right = Action {
@@ -153,8 +176,8 @@ mod tests {
             ..Action::default()
         };
         let stopped = drive(&maze, against_wall, other, forward_right, &params);
-        assert_eq!(stopped.position, against_wall.position);
-        assert!(stopped.angle > 0.0);
+        assert!((stopped.position.x - against_wall.position.x).abs() < 1e-8);
+        assert!(stopped.angle.abs() < 1e-7);
         let away = drive(
             &maze,
             against_wall,
@@ -168,12 +191,174 @@ mod tests {
         assert!(away.position.x < against_wall.position.x);
 
         let touching = Pose {
-            position: Vec2::new(0.96, 0.5),
+            position: Vec2::new(0.92, 0.5),
             angle: 0.0,
         };
-        let stopped = drive(&maze, pose, touching, forward_right, &params);
-        assert_eq!(stopped.position, pose.position);
-        assert!(stopped.angle > 0.0);
+        let forward = Action {
+            forward: true,
+            ..Action::default()
+        };
+        let stopped = drive(&maze, pose, touching, forward, &params);
+        assert!((stopped.position.x - pose.position.x).abs() < 1e-8);
+    }
+
+    #[test]
+    fn drive_can_follow_a_wall_when_the_hull_has_clearance() {
+        let maze = Maze {
+            width: 4,
+            height: 4,
+            walls: vec![Wall {
+                a: Vec2::new(0.0, 1.0),
+                b: Vec2::new(2.0, 1.0),
+            }],
+        };
+        let other = Pose {
+            position: Vec2::new(3.5, 3.5),
+            angle: 0.0,
+        };
+        let moving = Action {
+            forward: true,
+            ..Action::default()
+        };
+        let almost_parallel = Pose {
+            position: Vec2::new(0.7, 1.27),
+            angle: -0.07,
+        };
+        let after = drive(&maze, almost_parallel, other, moving, &Params::default());
+        assert!(after.position.x > 0.736);
+
+        let tangent = Pose {
+            position: Vec2::new(0.7, 1.21),
+            angle: 0.0,
+        };
+        assert!(
+            drive(&maze, tangent, other, moving, &Params::default())
+                .position
+                .x
+                > 0.736
+        );
+    }
+
+    #[test]
+    fn rotation_stops_where_a_hull_corner_reaches_the_wall() {
+        let maze = Maze {
+            width: 4,
+            height: 4,
+            walls: vec![Wall {
+                a: Vec2::new(0.0, 1.0),
+                b: Vec2::new(2.0, 1.0),
+            }],
+        };
+        let pose = Pose {
+            position: Vec2::new(0.7, 1.213),
+            angle: 0.0,
+        };
+        let other = Pose {
+            position: Vec2::new(3.5, 3.5),
+            angle: 0.0,
+        };
+        let turning = Action {
+            turn_right: true,
+            ..Action::default()
+        };
+        let after = drive(&maze, pose, other, turning, &Params::default());
+        assert_eq!(after.position, pose.position);
+        assert!(after.angle > 0.0 && after.angle < TAU / 90.0);
+        let extent = 0.21 * after.angle.sin() + 0.17 * after.angle.cos();
+        assert!(after.position.y - extent >= 1.04 - 1e-8);
+        let further = drive(&maze, after, other, turning, &Params::default());
+        assert!((further.angle - after.angle).abs() < 1e-7);
+    }
+
+    #[test]
+    fn turning_stops_at_the_other_tank_body() {
+        let maze = Maze {
+            width: 4,
+            height: 4,
+            walls: vec![],
+        };
+        let pose = Pose {
+            position: Vec2::new(0.7, 1.343),
+            angle: 0.0,
+        };
+        let other = Pose {
+            position: Vec2::new(0.7, 1.0),
+            angle: 0.0,
+        };
+        let turn = Action {
+            turn_right: true,
+            ..Action::default()
+        };
+        let after = drive(&maze, pose, other, turn, &Params::default());
+        assert_eq!(after.position, pose.position);
+        assert!((0.013..0.016).contains(&after.angle));
+    }
+
+    #[test]
+    fn turning_cannot_skip_a_brief_corner_contact() {
+        let maze = Maze {
+            width: 4,
+            height: 4,
+            walls: vec![Wall {
+                a: Vec2::new(0.0, 1.0),
+                b: Vec2::new(2.0, 1.0),
+            }],
+        };
+        // The corner would cross the wall for barely half a degree.
+        let pose = Pose {
+            position: Vec2::new(0.7, 1.310182121722126),
+            angle: 50.5090059575_f64.to_radians(),
+        };
+        let other = Pose {
+            position: Vec2::new(3.5, 3.5),
+            angle: 0.0,
+        };
+        let turn = Action {
+            turn_right: true,
+            ..Action::default()
+        };
+        let after = drive(&maze, pose, other, turn, &Params::default());
+        assert!((50.73..50.75).contains(&after.angle.to_degrees()));
+    }
+
+    #[test]
+    fn driving_after_a_blocked_turn_cannot_enter_the_wall() {
+        let maze = Maze {
+            width: 4,
+            height: 4,
+            walls: vec![Wall {
+                a: Vec2::new(0.0, 1.0),
+                b: Vec2::new(2.0, 1.0),
+            }],
+        };
+        let other = Pose {
+            position: Vec2::new(3.5, 3.5),
+            angle: 0.0,
+        };
+        let mut pose = Pose {
+            position: Vec2::new(0.7, 1.213),
+            angle: 0.0,
+        };
+        let action = Action {
+            turn_left: true,
+            forward: true,
+            ..Action::default()
+        };
+        for _ in 0..5 {
+            pose = drive(&maze, pose, other, action, &Params::default());
+            let extent = 0.21 * pose.angle.sin().abs() + 0.17 * pose.angle.cos().abs();
+            assert!(pose.position.y - extent >= 1.04 - 1e-8, "{pose:?}");
+        }
+    }
+
+    #[test]
+    fn playtest_defaults_use_matching_drive_speeds_and_slower_reload() {
+        let params = Params::default();
+        assert_eq!(params.forward_secs, 0.45);
+        assert_eq!(params.reverse_secs, 0.45);
+        assert_eq!(params.turn_secs, 1.5);
+        assert_eq!(params.reload_secs, 5.0);
+        assert_eq!(params.wall_contacts, 10);
     }
 
     #[test]

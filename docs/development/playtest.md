@@ -6,13 +6,25 @@
 
 | 职责 | 位置 |
 | --- | --- |
-| 迷宫、出生、坦克移动和几何碰撞 | [arena-core](../../crates/arena-core/src/lib.rs) |
+| 迷宫、出生、坦克移动与车身碰撞 | [arena-core](../../crates/arena-core/src/lib.rs) · [矩形车身](../../crates/arena-core/src/hull.rs) |
 | 补弹、开火和单步结算 | [Round](../../crates/arena-core/src/round.rs) |
 | 本地 HTTP 入口、WebSocket 与定时器 | [arena-playtest 主程序](../../crates/arena-playtest/src/main.rs) |
 | 消息格式、同图与换图重开、计分 | [Session](../../crates/arena-playtest/src/session.rs) |
 | 按键、连接与设置，Canvas 绘制 | [app.js](../../crates/arena-playtest/web/app.js) · [canvas.js](../../crates/arena-playtest/web/canvas.js) |
 
 Rust 核心每次 `Round::step` 推进 1/60 秒。当前服务将键盘操作传给玩家坦克，将空操作传给静止靶。同一种子、同一构建和同一串逐步输入得到相同局面。浏览器通过 WebSocket 获取快照，按刷新频率绘制。参数校验由 Rust 执行。
+
+## 试玩规则默认值
+
+| 项目 | 默认值 |
+| --- | --- |
+| 前进或后退一格 | 0.45 秒 |
+| 原地转一圈 | 1.5 秒 |
+| 补回 1 发 | 5 秒 |
+| 普通弹速度 | 每秒 4.5 格 |
+| 弹丸消失前的累计触墙次数 | 10 次 |
+
+车身碰撞使用随朝向旋转的 0.42 × 0.34 格矩形，长度沿车头方向测量。移动、原地转向和子弹命中都使用同一矩形。车身转到贴墙角度时停止旋转，弹丸沿单步路径判断是否命中车身。浏览器从快照读取车身尺寸和炮口距离，炮管用于显示出弹位置。
 
 ## 验证
 

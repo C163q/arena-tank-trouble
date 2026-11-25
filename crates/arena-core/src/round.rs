@@ -1,9 +1,8 @@
 use crate::projectile::{Impact, Projectile};
-use crate::{Action, Maze, Params, Pose, TICKS_PER_SECOND, Vec2, drive};
+use crate::{Action, MUZZLE_DISTANCE, Maze, Params, Pose, TICKS_PER_SECOND, Vec2, drive};
 
 const MAGAZINE_CAPACITY: u8 = 5;
-const PROJECTILE_STEP: f64 = 9.0 / TICKS_PER_SECOND as f64;
-const MUZZLE_DISTANCE: f64 = 0.28;
+const PROJECTILE_STEP: f64 = 4.5 / TICKS_PER_SECOND as f64;
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 #[cfg_attr(feature = "serde", derive(serde::Serialize))]
@@ -173,7 +172,7 @@ impl Round {
 
 #[cfg(test)]
 mod tests {
-    use std::f64::consts::{FRAC_PI_4, PI};
+    use std::f64::consts::{FRAC_PI_2, FRAC_PI_4, PI};
 
     use crate::Wall;
 
@@ -223,6 +222,48 @@ mod tests {
     }
 
     #[test]
+    fn ordinary_projectile_travels_half_the_previous_distance_per_tick() {
+        let mut round = fixture(
+            vec![],
+            pose(1.0, 1.0, 0.0),
+            pose(1.0, 7.0, 0.0),
+            Params::default(),
+        );
+        fire(&mut round);
+        let first = round.view().projectiles[0].position;
+        idle(&mut round, 1);
+        let second = round.view().projectiles[0].position;
+        assert!((second.x - first.x - 0.075).abs() < 1e-9);
+    }
+
+    #[test]
+    fn turning_can_dodge_a_shot_without_moving_the_tank_center() {
+        let start = pose(4.0, 1.23, FRAC_PI_2);
+        let make_round = || fixture(vec![], pose(1.0, 1.0, 0.0), start, Params::default());
+        let mut stationary = make_round();
+        fire(&mut stationary);
+        idle(&mut stationary, 50);
+        assert_eq!(stationary.view().outcome, RoundOutcome::TargetHit);
+
+        let mut turning = make_round();
+        fire(&mut turning);
+        for _ in 0..22 {
+            turning.step([
+                Action::default(),
+                Action {
+                    turn_left: true,
+                    ..Action::default()
+                },
+            ]);
+        }
+        idle(&mut turning, 40);
+        let view = turning.view();
+        assert_eq!(view.tanks[1].pose.position, start.position);
+        assert_eq!(view.outcome, RoundOutcome::Running);
+        assert!(view.projectiles[0].position.x > start.position.x + 0.3);
+    }
+
+    #[test]
     fn magazine_refills_on_due_step() {
         let mut round = fixture(
             vec![],
@@ -236,16 +277,16 @@ mod tests {
         }
         fire(&mut round);
         assert_eq!(round.view().projectiles.len(), 5);
-        idle(&mut round, 54);
+        idle(&mut round, 294);
         assert_eq!(round.view().tanks[0].ammo, 0);
         idle(&mut round, 1);
         assert_eq!(round.view().tanks[0].ammo, 1);
-        idle(&mut round, 60);
+        idle(&mut round, 300);
         assert_eq!(round.view().tanks[0].ammo, 2);
-        idle(&mut round, 240);
+        idle(&mut round, 1200);
         assert_eq!(round.view().tanks[0].ammo, 5);
         fire(&mut round);
-        idle(&mut round, 59);
+        idle(&mut round, 299);
         assert_eq!(round.view().tanks[0].ammo, 4);
         idle(&mut round, 1);
         assert_eq!(round.view().tanks[0].ammo, 5);
@@ -303,21 +344,24 @@ mod tests {
             },
         );
         fire(&mut round);
-        idle(&mut round, 1);
+        idle(&mut round, 3);
         let at_corner = round.view().projectiles[0].position;
         idle(&mut round, 1);
         let after = round.view().projectiles[0].position;
         assert!(after.x < at_corner.x && after.y < at_corner.y);
 
-        // The trajectory clips the target between two consecutive samples.
-        let mut round = fixture(
-            vec![],
-            pose(1.0, 1.0, 0.0),
-            pose(1.355, 1.26, 0.0),
-            Params::default(),
-        );
-        fire(&mut round);
-        assert_eq!(round.view().outcome, RoundOutcome::TargetHit);
+        // A long sweep crosses the whole hull, with both endpoints outside.
+        let mut shot = Projectile::new(0, pose(1.0, 1.0, 0.0));
+        let arena = Maze {
+            width: 4,
+            height: 4,
+            walls: vec![],
+        };
+        let tanks = [pose(1.0, 1.0, 0.0), pose(2.0, 1.0, FRAC_PI_4)];
+        assert!(matches!(
+            shot.advance(&arena, &tanks, 2.0, 2),
+            Some(Impact::Tank(1))
+        ));
     }
 
     #[test]

@@ -53,7 +53,7 @@ pub(super) fn sweep_maze(maze: &Maze, start: Vec2, delta: Vec2, radius: f64) -> 
     nearest
 }
 
-fn sweep_wall(wall: Wall, start: Vec2, delta: Vec2, radius: f64) -> Option<Contact> {
+pub(super) fn sweep_wall(wall: Wall, start: Vec2, delta: Vec2, radius: f64) -> Option<Contact> {
     // A wall with round ends is the union of its side strip and endpoint discs.
     let vertical = wall.a.x == wall.b.x;
     let coordinates = |v: Vec2| if vertical { (v.x, v.y) } else { (v.y, v.x) };

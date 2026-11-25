@@ -1,4 +1,6 @@
-use arena_core::{Action, Params, Round, RoundOutcome, RoundView};
+use arena_core::{
+    Action, MUZZLE_DISTANCE, Params, Round, RoundOutcome, RoundView, TANK_LENGTH, TANK_WIDTH,
+};
 use rand::{RngCore, SeedableRng, rngs::StdRng};
 use serde::Deserialize;
 use serde_json::{Value, json};
@@ -146,6 +148,11 @@ impl Session {
             "round": self.generation,
             "tick": view.tick,
             "seed": view.seed.to_string(),
+            "geometry": {
+                "tank_length": TANK_LENGTH,
+                "tank_width": TANK_WIDTH,
+                "muzzle_distance": MUZZLE_DISTANCE,
+            },
             "width": view.maze.width,
             "height": view.maze.height,
             "walls": view.maze.walls,
@@ -281,6 +288,6 @@ mod tests {
         assert_eq!(second.tick()["tanks"][0]["ammo"], 5);
         first.receive(&restart(0, "new", 2.0)).unwrap();
         assert_eq!(second.state()["seed"], "42");
-        assert_eq!(second.state()["params"]["reload_secs"], 1.0);
+        assert_eq!(second.state()["params"]["reload_secs"], 5.0);
     }
 }

@@ -1,5 +1,6 @@
-use crate::collision::{EPSILON, sweep_circle, sweep_maze};
-use crate::{Maze, Pose, TANK_RADIUS, Vec2};
+use crate::collision::{EPSILON, sweep_maze};
+use crate::hull::Hull;
+use crate::{Maze, Pose, Vec2};
 
 const RADIUS: f64 = 0.035;
 
@@ -63,20 +64,14 @@ impl Projectile {
     }
 
     fn first_tank_contact(&self, tanks: &[Pose; 2], delta: Vec2) -> Option<(usize, f64)> {
-        let radius = TANK_RADIUS + RADIUS;
         tanks
             .iter()
             .enumerate()
             .filter(|&(index, _)| index != self.owner || self.contacts != 0)
-            .filter_map(|(index, tank)| {
-                let offset = self.position - tank.position;
-                let time = if offset.dot(offset) <= radius * radius {
-                    // A tank may have moved onto the projectile this step.
-                    0.0
-                } else {
-                    sweep_circle(self.position, delta, tank.position, radius)?.time
-                };
-                Some((index, time))
+            .filter_map(|(index, &tank)| {
+                Hull::new(tank)
+                    .disc_contact(self.position, delta, RADIUS)
+                    .map(|time| (index, time))
             })
             .min_by(|a, b| a.1.total_cmp(&b.1))
     }

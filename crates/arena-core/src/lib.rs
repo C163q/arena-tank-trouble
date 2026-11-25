@@ -1,4 +1,5 @@
 mod collision;
+mod hull;
 mod maze;
 mod motion;
 mod projectile;
@@ -10,7 +11,9 @@ pub use round::{ProjectileView, Round, RoundOutcome, RoundView, TankView};
 
 pub const TICKS_PER_SECOND: u32 = 60;
 pub const WALL_THICKNESS: f64 = 0.08;
-pub const TANK_RADIUS: f64 = 0.23;
+pub const TANK_LENGTH: f64 = 0.42;
+pub const TANK_WIDTH: f64 = 0.34;
+pub const MUZZLE_DISTANCE: f64 = 0.32;
 
 #[derive(Clone, Copy, Debug, PartialEq)]
 #[cfg_attr(feature = "serde", derive(serde::Serialize))]

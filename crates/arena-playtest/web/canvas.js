@@ -9,24 +9,24 @@ let latestCanvas;
 let latestRound;
 let latestTick;
 
-function tank(ctx, pose, colors) {
+function tank(ctx, pose, colors, geometry) {
+  const { tank_length: length, tank_width: width, muzzle_distance: muzzle } = geometry;
+  const trackWidth = width * 0.25;
   ctx.save();
   ctx.translate(pose.position.x, pose.position.y);
   ctx.rotate(pose.angle);
+
   ctx.fillStyle = colors.dark;
+  ctx.fillRect(-length / 2, -width / 2, length, width);
   ctx.beginPath();
-  ctx.roundRect(-0.18, -0.15, 0.36, 0.075, 0.025);
-  ctx.roundRect(-0.18, 0.075, 0.36, 0.075, 0.025);
-  ctx.roundRect(0.02, -0.036, 0.26, 0.072, 0.016);
+  ctx.roundRect(0, -width * 0.12, muzzle, width * 0.24, width * 0.05);
   ctx.fill();
 
   ctx.fillStyle = colors.main;
-  ctx.beginPath();
-  ctx.roundRect(-0.18, -0.105, 0.35, 0.21, 0.045);
-  ctx.fill();
+  ctx.fillRect(-length / 2, -width / 2 + trackWidth, length, width - 2 * trackWidth);
   ctx.fillStyle = colors.light;
   ctx.beginPath();
-  ctx.roundRect(-0.075, -0.06, 0.16, 0.12, 0.038);
+  ctx.roundRect(-length * 0.20, -width * 0.2, length * 0.45, width * 0.4, width * 0.13);
   ctx.fill();
   ctx.restore();
 }
@@ -69,8 +69,8 @@ export function render(canvas, state) {
   }
   ctx.stroke();
 
-  tank(ctx, state.tanks[0].pose, palette.player);
-  tank(ctx, state.tanks[1].pose, palette.target);
+  tank(ctx, state.tanks[0].pose, palette.player, state.geometry);
+  tank(ctx, state.tanks[1].pose, palette.target, state.geometry);
   ctx.fillStyle = palette.wall;
   for (const { position: { x, y } } of state.projectiles) {
     ctx.beginPath();
