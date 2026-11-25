@@ -18,6 +18,7 @@ pub const TANK_LENGTH: f64 = 0.42;
 pub const TANK_WIDTH: f64 = 0.34;
 pub const MUZZLE_DISTANCE: f64 = 0.32;
 pub const PROJECTILE_RADIUS: f64 = 0.042;
+pub const LASER_RADIUS: f64 = 0.030;
 
 #[derive(Clone, Copy, Debug, PartialEq)]
 #[cfg_attr(feature = "serde", derive(serde::Serialize))]

@@ -1,6 +1,6 @@
 use crate::collision::{EPSILON, sweep_maze};
 use crate::hull::OrientedBox;
-use crate::{Maze, PROJECTILE_RADIUS, Pose, Vec2};
+use crate::{LASER_RADIUS, Maze, PROJECTILE_RADIUS, Pose, Vec2};
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 #[cfg_attr(feature = "serde", derive(serde::Serialize))]
@@ -8,6 +8,15 @@ use crate::{Maze, PROJECTILE_RADIUS, Pose, Vec2};
 pub enum ProjectileKind {
     Shell,
     Laser,
+}
+
+impl ProjectileKind {
+    fn radius(self) -> f64 {
+        match self {
+            Self::Shell => PROJECTILE_RADIUS,
+            Self::Laser => LASER_RADIUS,
+        }
+    }
 }
 
 #[derive(Clone, Copy)]
@@ -51,7 +60,7 @@ impl Projectile {
     ) -> Option<Impact> {
         while distance > EPSILON {
             let delta = self.direction.scale(distance);
-            let wall = sweep_maze(maze, self.position, delta, PROJECTILE_RADIUS);
+            let wall = sweep_maze(maze, self.position, delta, self.kind.radius());
             let tank = self.first_tank_contact(tanks, delta);
             if let Some((index, time)) = tank
                 && wall.is_none_or(|hit| time < hit.time - EPSILON)
@@ -99,7 +108,7 @@ impl Projectile {
             .filter(|&(index, _)| index != self.owner || self.contacts != 0)
             .filter_map(|(index, &tank)| {
                 OrientedBox::tank(tank)
-                    .disc_contact(self.position, delta, PROJECTILE_RADIUS)
+                    .disc_contact(self.position, delta, self.kind.radius())
                     .map(|time| (index, time))
             })
             .min_by(|a, b| a.1.total_cmp(&b.1))

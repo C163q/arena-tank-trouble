@@ -2,13 +2,13 @@ use crate::hull::OrientedBox;
 use crate::pickups::Pickups;
 use crate::projectile::{Impact, Projectile};
 use crate::{
-    Action, MUZZLE_DISTANCE, Maze, PROJECTILE_RADIUS, Params, Pose, ProjectileKind,
-    TICKS_PER_SECOND, Vec2, drive,
+    Action, LASER_RADIUS, MUZZLE_DISTANCE, Maze, Params, Pose, ProjectileKind, TICKS_PER_SECOND,
+    Vec2, drive,
 };
 
 const MAGAZINE_CAPACITY: u8 = 5;
 const PROJECTILE_SPEED_RATIO: f64 = 1.125;
-const LASER_SPEED_MULTIPLIER: f64 = 4.0;
+const LASER_SPEED_MULTIPLIER: f64 = 6.0;
 const LASER_WALL_CONTACTS: u8 = 5;
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -195,7 +195,7 @@ impl Round {
             let hull = OrientedBox::tank(pose);
             *hit = *hit
                 || self.laser_trails.iter().any(|trail| {
-                    hull.disc_contact(trail.start, trail.end - trail.start, PROJECTILE_RADIUS)
+                    hull.disc_contact(trail.start, trail.end - trail.start, LASER_RADIUS)
                         .is_some()
                 });
         }
@@ -405,7 +405,7 @@ mod tests {
         assert_eq!(trail.expires_at, 13);
         let head = view.projectiles[0].position;
         idle(&mut round, 1);
-        assert!((round.view().projectiles[0].position.x - head.x - 10.0 / 60.0).abs() < 1e-9);
+        assert!((round.view().projectiles[0].position.x - head.x - 15.0 / 60.0).abs() < 1e-9);
         assert_eq!(round.view().tanks[0].ammo, 5);
         assert_eq!(round.view().outcome, RoundOutcome::Running);
 
@@ -419,8 +419,31 @@ mod tests {
         fire(&mut against_wall);
         let view = against_wall.view();
         assert_eq!(view.outcome, RoundOutcome::SelfHit);
-        assert!((view.laser_trails[0].start.x - 0.918).abs() < 1e-9);
+        assert!((view.laser_trails[0].start.x - 0.93).abs() < 1e-9);
         assert!(view.laser_trails[0].end.x < view.laser_trails[0].start.x);
+    }
+
+    #[test]
+    fn narrower_laser_and_trail_miss_a_shell_graze() {
+        let make_round = || {
+            fixture(
+                vec![],
+                pose(1.0, 1.0, 0.0),
+                pose(2.0, 1.205, 0.0),
+                Params::default(),
+            )
+        };
+        let mut ordinary = make_round();
+        fire(&mut ordinary);
+        idle(&mut ordinary, 24);
+        assert_eq!(ordinary.view().outcome, RoundOutcome::TargetHit);
+
+        let mut laser = make_round();
+        laser.tanks[0].laser_loaded = true;
+        fire(&mut laser);
+        idle(&mut laser, 24);
+        assert_eq!(laser.view().outcome, RoundOutcome::Running);
+        assert!(laser.view().projectiles[0].position.x > 2.0);
     }
 
     #[test]
@@ -440,15 +463,15 @@ mod tests {
             pose(1.5, 1.5, 0.0),
             ProjectileKind::Laser,
         ));
-        idle(&mut ricochets, 7);
+        idle(&mut ricochets, 5);
         assert_eq!(ricochets.view().projectiles.len(), 1);
         idle(&mut ricochets, 1);
         let complete = ricochets.view();
         assert!(complete.projectiles.is_empty());
         assert!(!complete.laser_trails.is_empty());
         let last = complete.laser_trails.last().unwrap();
-        assert!((last.end.x - 1.918).abs() < 1e-9);
-        assert_eq!(last.expires_at, 20);
+        assert!((last.end.x - 1.93).abs() < 1e-9);
+        assert_eq!(last.expires_at, 18);
 
         let mut hit = fixture(
             vec![],
@@ -462,7 +485,7 @@ mod tests {
         let view = hit.view();
         assert_eq!(view.outcome, RoundOutcome::TargetHit);
         assert!(view.projectiles.is_empty());
-        assert!((view.laser_trails.last().unwrap().end.x - 1.608).abs() < 1e-9);
+        assert!((view.laser_trails.last().unwrap().end.x - 1.62).abs() < 1e-9);
     }
 
     #[test]
@@ -478,7 +501,7 @@ mod tests {
             pose(1.4, 1.5, PI),
             ProjectileKind::Laser,
         ));
-        idle(&mut round, 5);
+        idle(&mut round, 4);
         assert_eq!(round.view().outcome, RoundOutcome::Running);
         idle(&mut round, 1);
         assert_eq!(round.view().outcome, RoundOutcome::Draw);
@@ -506,8 +529,10 @@ mod tests {
         drives_into_own_trail.tanks[0].laser_loaded = true;
         fire(&mut drives_into_own_trail);
         drives_into_own_trail.projectiles.clear();
-        drives_into_own_trail.step([forward, Action::default()]);
-        assert_eq!(drives_into_own_trail.view().outcome, RoundOutcome::Running);
+        for _ in 0..2 {
+            drives_into_own_trail.step([forward, Action::default()]);
+            assert_eq!(drives_into_own_trail.view().outcome, RoundOutcome::Running);
+        }
         drives_into_own_trail.step([forward, Action::default()]);
         assert_eq!(drives_into_own_trail.view().outcome, RoundOutcome::SelfHit);
 

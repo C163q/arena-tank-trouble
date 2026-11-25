@@ -235,6 +235,7 @@ def test_laser_pickup_and_fire(page, url, artifacts):
     first = wire.wait_for(lambda s: len(s["pickups"]) == 2, "first laser batch", timeout=25)
     assert min(s["tick"] for s in wire.states if s["pickups"]) == 900
     assert first["geometry"]["laser_pickup_size"] == 0.32
+    assert first["geometry"]["laser_radius"] == 0.030
     wait_for_laser_pixel(page, 4.62, 0.62)
     page.screenshot(path=artifacts / "laser-pickups.png")
     assert not first["tanks"][0]["laser_loaded"]

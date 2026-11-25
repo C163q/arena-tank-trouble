@@ -86,9 +86,8 @@ export function render(canvas, state) {
     ctx.fillRect(x - pickupSize / 4, y - pickupSize / 16, pickupSize / 2, pickupSize / 8);
   }
 
-  const radius = state.geometry.projectile_radius;
   ctx.strokeStyle = palette.laser;
-  ctx.lineWidth = radius * 2;
+  ctx.lineWidth = state.geometry.laser_radius * 2;
   ctx.lineCap = "round";
   ctx.beginPath();
   for (const { start, end } of state.laser_trails) {
@@ -101,7 +100,9 @@ export function render(canvas, state) {
   tank(ctx, state.tanks[1], palette.target, state.geometry);
 
   for (const { kind, position: { x, y } } of state.projectiles) {
-    ctx.fillStyle = kind === "laser" ? palette.laser : palette.wall;
+    const laser = kind === "laser";
+    const radius = laser ? state.geometry.laser_radius : state.geometry.projectile_radius;
+    ctx.fillStyle = laser ? palette.laser : palette.wall;
     ctx.beginPath();
     ctx.arc(x, y, radius, 0, Math.PI * 2);
     ctx.fill();

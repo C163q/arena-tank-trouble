@@ -1,6 +1,6 @@
 use arena_core::{
-    Action, LASER_PICKUP_SIZE, MUZZLE_DISTANCE, PROJECTILE_RADIUS, Params, Round, RoundOutcome,
-    RoundView, TANK_LENGTH, TANK_WIDTH, WALL_THICKNESS,
+    Action, LASER_PICKUP_SIZE, LASER_RADIUS, MUZZLE_DISTANCE, PROJECTILE_RADIUS, Params, Round,
+    RoundOutcome, RoundView, TANK_LENGTH, TANK_WIDTH, WALL_THICKNESS,
 };
 use rand::{RngCore, SeedableRng, rngs::StdRng};
 use serde::Deserialize;
@@ -157,6 +157,7 @@ impl Session {
                 "projectile_radius": PROJECTILE_RADIUS,
                 "wall_thickness": WALL_THICKNESS,
                 "laser_pickup_size": LASER_PICKUP_SIZE,
+                "laser_radius": LASER_RADIUS,
             },
             "width": view.maze.width,
             "height": view.maze.height,
