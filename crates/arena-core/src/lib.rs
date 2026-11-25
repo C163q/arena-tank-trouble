@@ -13,6 +13,7 @@ pub const WALL_THICKNESS: f64 = 0.08;
 pub const TANK_RADIUS: f64 = 0.23;
 
 #[derive(Clone, Copy, Debug, PartialEq)]
+#[cfg_attr(feature = "serde", derive(serde::Serialize))]
 pub struct Vec2 {
     pub x: f64,
     pub y: f64,

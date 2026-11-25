@@ -49,12 +49,14 @@ fn cell_distances(start: usize, is_open: impl Fn(Edge) -> bool) -> [usize; CELLS
 }
 
 #[derive(Clone, Copy, Debug, PartialEq)]
+#[cfg_attr(feature = "serde", derive(serde::Serialize))]
 pub struct Pose {
     pub position: Vec2,
     pub angle: f64,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq)]
+#[cfg_attr(feature = "serde", derive(serde::Serialize))]
 pub struct Wall {
     pub a: Vec2,
     pub b: Vec2,

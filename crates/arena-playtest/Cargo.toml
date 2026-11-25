@@ -1,0 +1,13 @@
+[package]
+name = "arena-playtest"
+version = "0.1.0"
+edition = "2024"
+
+[dependencies]
+serde_json = "1"
+arena-core = { path = "../arena-core", features = ["serde"] }
+axum = { version = "0.8", features = ["ws"] }
+rand = "0.8"
+serde = { version = "1", features = ["derive"] }
+tokio = { version = "1", features = ["macros", "net", "rt-multi-thread", "time"] }
+futures-util = { version = "0.3", default-features = false, features = ["sink"] }

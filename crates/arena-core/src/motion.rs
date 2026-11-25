@@ -13,6 +13,7 @@ pub struct Action {
 }
 
 #[derive(Clone, Copy, Debug, PartialEq)]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 pub struct Params {
     pub forward_secs: f64,
     pub reverse_secs: f64,

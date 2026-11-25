@@ -6,6 +6,8 @@ const PROJECTILE_STEP: f64 = 9.0 / TICKS_PER_SECOND as f64;
 const MUZZLE_DISTANCE: f64 = 0.28;
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[cfg_attr(feature = "serde", derive(serde::Serialize))]
+#[cfg_attr(feature = "serde", serde(rename_all = "snake_case"))]
 pub enum RoundOutcome {
     Running,
     TargetHit,
@@ -14,12 +16,14 @@ pub enum RoundOutcome {
 }
 
 #[derive(Clone, Copy, Debug, PartialEq)]
+#[cfg_attr(feature = "serde", derive(serde::Serialize))]
 pub struct TankView {
     pub pose: Pose,
     pub ammo: u8,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq)]
+#[cfg_attr(feature = "serde", derive(serde::Serialize))]
 pub struct ProjectileView {
     pub position: Vec2,
 }
