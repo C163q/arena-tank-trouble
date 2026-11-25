@@ -58,6 +58,19 @@ impl OrientedBox {
         self.half.x * self.forward.dot(axis).abs() + self.half.y * self.side.dot(axis).abs()
     }
 
+    pub fn within(self, bounds: Bounds) -> bool {
+        let half = Vec2::new(
+            self.extent(Vec2::new(1.0, 0.0)),
+            self.extent(Vec2::new(0.0, 1.0)),
+        );
+        let min = self.center - half;
+        let max = self.center + half;
+        bounds.min.x <= min.x
+            && bounds.min.y <= min.y
+            && bounds.max.x >= max.x
+            && bounds.max.y >= max.y
+    }
+
     fn axes(self, other: Self) -> [Vec2; 4] {
         [self.forward, self.side, other.forward, other.side]
     }

@@ -14,6 +14,7 @@ pub fn write(mut output: impl Write, replay: &Replay) -> io::Result<()> {
             "seed": replay.seed,
             "ticks_per_second": replay.ticks_per_second,
             "observation_delay_ticks": replay.observation_delay_ticks,
+            "zone_schedule": replay.zone_schedule,
             "config": replay.config,
             "geometry": replay.geometry,
             "map": replay.map,
@@ -24,6 +25,7 @@ pub fn write(mut output: impl Write, replay: &Replay) -> io::Result<()> {
                 "projectiles": ["owner", "kind", "x", "y", "vx", "vy", "wall_contacts"],
                 "pickups": ["kind", "x", "y"],
                 "laser_trails": ["owner", "start_x", "start_y", "end_x", "end_y", "expires_at"],
+                "safe_zone": ["min_x", "min_y", "max_x", "max_y"],
                 "eliminations": ["tank", "owner"],
                 "decisions": ["keys", "status", "diagnostic"]
             }
@@ -121,6 +123,7 @@ fn frame_record(frame: &Frame) -> Value {
         "projectiles": projectiles,
         "pickups": pickups,
         "laser_trails": laser_trails,
+        "safe_zone": frame.safe_zone.map(|zone| (zone.min.x, zone.min.y, zone.max.x, zone.max.y)),
         "eliminations": eliminations,
         "decisions": decisions,
         "victory_at": frame.victory_at

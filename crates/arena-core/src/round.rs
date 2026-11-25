@@ -7,7 +7,7 @@ use crate::pickups::Pickups;
 use crate::projectile::{Impact, Projectile};
 use crate::{
     Action, LASER_RADIUS, MUZZLE_DISTANCE, Maze, Params, Pickup, PickupKind, Pose, ProjectileKind,
-    TICKS_PER_SECOND, Vec2,
+    SafeZone, TICKS_PER_SECOND, Vec2,
 };
 
 const VICTORY_DELAY_TICKS: u64 = 2 * TICKS_PER_SECOND as u64;
@@ -61,7 +61,8 @@ pub struct LaserTrail {
 #[cfg_attr(feature = "serde", derive(serde::Serialize))]
 pub struct Elimination {
     pub tank: usize,
-    pub owner: usize,
+    /// Shot owner. Zone eliminations have no owner.
+    pub owner: Option<usize>,
 }
 
 #[derive(Debug, PartialEq)]
@@ -74,6 +75,7 @@ pub struct RoundView<'a> {
     pub projectiles: Vec<ProjectileView>,
     pub pickups: &'a [Pickup],
     pub laser_trails: &'a [LaserTrail],
+    pub safe_zone: Option<SafeZone>,
     pub outcome: RoundOutcome,
     pub victory_at: Option<u64>,
     pub eliminations: &'a [Elimination],
@@ -289,11 +291,12 @@ impl Round {
             };
             advance(bullet, distance, false)
         });
+        let safe_zone = SafeZone::at_tick(&self.maze, self.tick);
         // Include new segments: their final point can touch multiple tanks at once.
         for (index, ((tank, pose), hit)) in self.tanks.iter_mut().zip(poses).zip(hits).enumerate() {
             let Some(pose) = pose else { continue };
+            let hull = OrientedBox::tank(pose);
             let owner = hit.or_else(|| {
-                let hull = OrientedBox::tank(pose);
                 self.laser_trails
                     .iter()
                     .find(|trail| {
@@ -302,7 +305,7 @@ impl Round {
                     })
                     .map(|trail| trail.owner)
             });
-            if let Some(owner) = owner {
+            if owner.is_some() || safe_zone.is_some_and(|zone| !zone.contains(hull)) {
                 tank.alive = false;
                 self.eliminations.push(Elimination { tank: index, owner });
             }
@@ -368,6 +371,7 @@ impl Round {
                 .collect(),
             pickups: self.pickups.items(),
             laser_trails: &self.laser_trails,
+            safe_zone: SafeZone::at_tick(&self.maze, self.tick),
             outcome: self.outcome,
             victory_at: self.victory_at,
             eliminations: &self.eliminations,
@@ -385,7 +389,7 @@ fn interval_ticks(seconds: f64) -> u64 {
 mod tests {
     use std::f64::consts::{FRAC_PI_2, FRAC_PI_4, PI};
 
-    use crate::Wall;
+    use crate::{TANK_LENGTH, Wall};
 
     use super::*;
 
@@ -430,6 +434,63 @@ mod tests {
         for _ in 0..ticks {
             round.step([Action::default(); 2]);
         }
+    }
+
+    fn populate_pickups(round: &mut Round) {
+        let poses: Vec<_> = round.tanks.iter().map(Tank::live_pose).collect();
+        for tick in [900, 1500, 2100, 2700, 3300] {
+            round.pickups.spawn_due(tick, &round.maze, &poses);
+        }
+    }
+
+    #[test]
+    fn the_zone_checks_the_rotated_hull_and_remains_lethal_during_victory_delay() {
+        let tangent_x = 3.0 + TANK_LENGTH / 2.0;
+        let mut round = fixture(
+            vec![],
+            pose(tangent_x, 3.0, 0.0),
+            pose(tangent_x, 5.0, FRAC_PI_4),
+            Params::default(),
+        );
+        round.tick = 60 * u64::from(TICKS_PER_SECOND) - 1;
+
+        idle(&mut round, 1);
+        let view = round.view();
+        assert!(view.tanks[0].alive, "touching the boundary is safe");
+        assert!(
+            !view.tanks[1].alive,
+            "a rotated corner extends past the boundary"
+        );
+        assert_eq!(
+            view.eliminations,
+            [Elimination {
+                tank: 1,
+                owner: None
+            }]
+        );
+        assert_eq!(view.victory_at, Some(view.tick + VICTORY_DELAY_TICKS));
+
+        idle(&mut round, 1);
+        assert_eq!(round.view().outcome, RoundOutcome::Draw);
+    }
+
+    #[test]
+    fn a_tank_can_move_inside_the_new_boundary_on_the_same_tick() {
+        let mut round = fixture(
+            vec![],
+            pose(3.20, 3.0, 0.0),
+            pose(6.0, 4.0, 0.0),
+            Params::default(),
+        );
+        round.tick = 60 * u64::from(TICKS_PER_SECOND) - 1;
+        round.step([
+            Action {
+                forward: true,
+                ..Action::default()
+            },
+            Action::default(),
+        ]);
+        assert!(round.view().tanks.iter().all(|tank| tank.alive));
     }
 
     #[test]
@@ -486,10 +547,7 @@ mod tests {
             [PickupKind::Shotgun, PickupKind::Laser],
         ] {
             let mut round = Round::new(42, Params::default()).unwrap();
-            for tick in [900, 1500, 2100, 2700, 3300] {
-                round.tick = tick - 1;
-                idle(&mut round, 1);
-            }
+            populate_pickups(&mut round);
             for kind in order {
                 let item = round
                     .view()
@@ -679,10 +737,7 @@ mod tests {
             pose(1.0, 7.0, 0.0),
             Params::default(),
         );
-        for tick in [900, 1500, 2100, 2700, 3300] {
-            round.tick = tick - 1;
-            idle(&mut round, 1);
-        }
+        populate_pickups(&mut round);
         let positions: Vec<_> = round
             .view()
             .pickups
@@ -849,8 +904,14 @@ mod tests {
         assert_eq!(
             round.view().eliminations,
             [
-                Elimination { tank: 0, owner: 0 },
-                Elimination { tank: 1, owner: 0 }
+                Elimination {
+                    tank: 0,
+                    owner: Some(0)
+                },
+                Elimination {
+                    tank: 1,
+                    owner: Some(0)
+                }
             ]
         );
     }
@@ -884,7 +945,10 @@ mod tests {
         assert!(!drives_into_own_trail.view().tanks[0].alive);
         assert_eq!(
             drives_into_own_trail.view().eliminations,
-            [Elimination { tank: 0, owner: 0 }]
+            [Elimination {
+                tank: 0,
+                owner: Some(0)
+            }]
         );
         idle(&mut drives_into_own_trail, 120);
         assert_eq!(
@@ -1105,7 +1169,10 @@ mod tests {
         round.step([Action::default(); 4]);
         assert_eq!(
             round.view().eliminations,
-            [Elimination { tank: 0, owner: 3 }]
+            [Elimination {
+                tank: 0,
+                owner: Some(3)
+            }]
         );
         assert_eq!(round.view().victory_at, None);
         shoot(&mut round, 3, 2.0);
@@ -1117,8 +1184,14 @@ mod tests {
         assert_eq!(
             view.eliminations,
             [
-                Elimination { tank: 1, owner: 3 },
-                Elimination { tank: 2, owner: 3 }
+                Elimination {
+                    tank: 1,
+                    owner: Some(3)
+                },
+                Elimination {
+                    tank: 2,
+                    owner: Some(3)
+                }
             ]
         );
         for _ in 0..120 {

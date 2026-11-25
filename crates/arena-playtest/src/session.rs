@@ -167,6 +167,7 @@ impl Session {
             "projectiles": view.projectiles,
             "pickups": view.pickups,
             "laser_trails": view.laser_trails,
+            "safe_zone": view.safe_zone,
             "params": view.params,
             "outcome": match view.outcome {
                 RoundOutcome::Running => "running",

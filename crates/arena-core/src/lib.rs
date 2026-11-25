@@ -5,6 +5,7 @@ mod motion;
 mod pickups;
 mod projectile;
 mod round;
+mod zone;
 
 pub use maze::{Maze, Pose, Wall};
 pub use motion::{Action, Params, drive};
@@ -14,6 +15,7 @@ pub use projectile::ProjectileKind;
 pub use round::{
     Elimination, LaserTrail, ProjectileView, Round, RoundOutcome, RoundView, TankView,
 };
+pub use zone::{SafeZone, ZONE_SCHEDULE, ZoneSchedule};
 
 pub const TICKS_PER_SECOND: u32 = 60;
 pub const WALL_THICKNESS: f64 = 0.08;

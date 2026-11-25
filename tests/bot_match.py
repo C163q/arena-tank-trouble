@@ -85,10 +85,10 @@ def fixture(directory, name, kind=0, wrong_abi=0):
     return library
 
 
-def run_match(binary, out, *bots, max_ticks=3600, seed=407, kill=None, survival=None, check=True):
-    command = [
-        str(binary), "--out", str(out), "--seed", str(seed), "--max-ticks", str(max_ticks),
-    ]
+def run_match(binary, out, *bots, max_ticks=None, seed=407, kill=None, survival=None, check=True):
+    command = [str(binary), "--out", str(out), "--seed", str(seed)]
+    if max_ticks is not None:
+        command.extend(("--max-ticks", str(max_ticks)))
     if kill is not None:
         command.extend(("--kill-points", str(kill)))
     if survival is not None:
@@ -181,6 +181,7 @@ def verify_timeline(path, data):
     assert header["type"] == "arena_timeline"
     assert header["map"] == data["map"]
     assert header["seats"] == data["seats"]
+    assert header["zone_schedule"] == data["zone_schedule"]
     assert result["type"] == "result"
     assert result["result"] == data["result"] and result["scores"] == data["scores"]
     assert len(frames) == len(data["frames"]) == result["tick"] + 1
@@ -188,6 +189,10 @@ def verify_timeline(path, data):
         assert compact["tick"] == exact["tick"] == index
         assert compact["victory_at"] == exact["victory_at"]
         assert compact["eliminations"] == [[e["tank"], e["owner"]] for e in exact["eliminations"]]
+        zone = exact["safe_zone"]
+        assert compact["safe_zone"] == (
+            [zone[edge][axis] for edge in ("min", "max") for axis in ("x", "y")] if zone else None
+        )
         assert len(compact["tanks"]) == len(exact["tanks"])
         assert len(compact["projectiles"]) == len(exact["projectiles"])
         assert compact["pickups"] == [[p["kind"], p["x"], p["y"]] for p in exact["pickups"]]
@@ -209,6 +214,21 @@ def verify_timeline(path, data):
             ) if decision["action"][name]) or "-", decision["status"], decision.get("diagnostic")]
             for decision in exact["decisions"]
         ]
+
+
+def verify_shrinking_zone(binary, out, idle):
+    data = run_match(binary, out, idle, idle, idle, idle)
+    assert data["zone_schedule"] == {"start_tick": 1800, "end_tick": 5400}
+    assert data["config"]["max_ticks"] == 5400
+    assert data["result"]["reason"] in ("winner", "all_eliminated")
+    assert data["frames"][1799]["safe_zone"] is None
+    assert data["frames"][1800]["safe_zone"] == {
+        "min": {"x": 0, "y": 0}, "max": {"x": data["map"]["width"], "y": data["map"]["height"]}
+    }
+    deaths = [event for frame in data["frames"] for event in frame["eliminations"]]
+    assert deaths and all(event["owner"] is None for event in deaths)
+    assert all(score["kill_points"] == 0 for score in data["scores"])
+    verify_timeline(out / "timeline.jsonl", data)
 
 
 def verify_browser(replay_path, screenshot):
@@ -313,12 +333,31 @@ def verify_browser(replay_path, screenshot):
         })
         expect(status).to_have_text("已载入 extended.json")
         assert viewer.locator("canvas").evaluate("(canvas) => canvas.toDataURL()") == starting_canvas
+        zone_replay = replay_path.parent / "shrinking-zone"
+        for name in ("replay.json", "timeline.jsonl"):
+            open_replay.set_input_files(str(zone_replay / name))
+            expect(status).to_have_text("已载入 " + name)
+            slider.focus()
+            viewer.keyboard.press("End")
+            expect(slider).to_have_value(slider.get_attribute("max"))
+            # At the final tick the edge is tinted red and an interior tile stays neutral.
+            assert viewer.locator("canvas").evaluate("""canvas => {
+                const ctx = canvas.getContext("2d");
+                const scale = Math.min(canvas.width / 12.24, canvas.height / 8.24);
+                const pixel = (x, y) => ctx.getImageData(
+                    Math.floor(canvas.width / 2 + (x - 6) * scale),
+                    Math.floor(canvas.height / 2 + (y - 4) * scale), 1, 1).data;
+                const [outerRed, outerGreen] = pixel(0.5, 0.5);
+                const [innerRed, innerGreen] = pixel(6.5, 4.5);
+                return outerRed - outerGreen > 25 && Math.abs(innerRed - innerGreen) < 10;
+            }""")
+        viewer.screenshot(path=zone_replay / "replay-preview.png", full_page=True)
         open_replay.set_input_files({
             "name": "broken.json", "mimeType": "application/json", "buffer": b"{}",
         })
         expect(status).to_contain_text("无法载入 broken.json")
         expect(viewer.locator("#scoreboard tr")).to_have_count(4)
-        expect(slider).to_have_value("0")
+        expect(slider).to_have_value(slider.get_attribute("max"))
         assert not errors, errors
         browser.close()
 
@@ -338,9 +377,11 @@ def main():
     assert len(data["seats"]) == 4 and data["observation_delay_ticks"] == 12
     assert data["scores"][data["result"]["seat"]]["survival_points"] == 2
     verify_timeline(args.artifacts / "timeline.jsonl", data)
+    with tempfile.TemporaryDirectory(prefix="arena-zone-") as work:
+        verify_shrinking_zone(binary, args.artifacts / "shrinking-zone", fixture(Path(work), "idle"))
     if args.browser:
         verify_browser(args.artifacts / "replay.html", args.artifacts / "replay-preview.png")
-    print("Bot match: real C ABI, timed decisions, kill and survival scoring, four-seat replay passed")
+    print("Bot match: real C ABI, timed decisions, scoring, shrinking zone and four-seat replay passed")
 
 
 DEMO_SEED = 407

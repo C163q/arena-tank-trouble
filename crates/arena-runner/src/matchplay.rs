@@ -1,7 +1,7 @@
 use arena_core::{
     Elimination, LASER_RADIUS, LaserTrail, MUZZLE_DISTANCE, PICKUP_SIZE, PROJECTILE_RADIUS, Params,
-    Pickup, ProjectileView, Round, RoundOutcome, RoundView, TANK_LENGTH, TANK_WIDTH,
-    TICKS_PER_SECOND, TankView, WALL_THICKNESS, Wall,
+    Pickup, ProjectileView, Round, RoundOutcome, RoundView, SafeZone, TANK_LENGTH, TANK_WIDTH,
+    TICKS_PER_SECOND, TankView, WALL_THICKNESS, Wall, ZONE_SCHEDULE, ZoneSchedule,
 };
 use serde::Serialize;
 
@@ -23,7 +23,7 @@ impl Default for MatchConfig {
     fn default() -> Self {
         Self {
             seed: 407,
-            max_ticks: 60 * u64::from(TICKS_PER_SECOND),
+            max_ticks: ZONE_SCHEDULE.end_tick,
             kill_points: 1,
             survival_points: 2,
             params: Params::default(),
@@ -76,6 +76,7 @@ pub struct Frame {
     pub projectiles: Vec<ProjectileView>,
     pub pickups: Vec<Pickup>,
     pub laser_trails: Vec<LaserTrail>,
+    pub safe_zone: Option<SafeZone>,
     pub eliminations: Vec<Elimination>,
     pub victory_at: Option<u64>,
     pub decisions: Vec<Decision>,
@@ -89,6 +90,7 @@ impl Frame {
             projectiles: view.projectiles,
             pickups: view.pickups.to_vec(),
             laser_trails: view.laser_trails.to_vec(),
+            safe_zone: view.safe_zone,
             eliminations: view.eliminations.to_vec(),
             victory_at: view.victory_at,
             decisions,
@@ -113,6 +115,7 @@ pub struct Observation<'a> {
     pub max_ticks: u64,
     pub kill_points: u32,
     pub survival_points: u32,
+    pub zone_schedule: ZoneSchedule,
     pub map: &'a Map,
     pub geometry: &'a Geometry,
     pub params: &'a Params,
@@ -121,6 +124,7 @@ pub struct Observation<'a> {
     pub projectiles: &'a [ProjectileView],
     pub laser_trails: &'a [LaserTrail],
     pub pickups: &'a [Pickup],
+    pub safe_zone: Option<SafeZone>,
 }
 
 fn observe<'a>(
@@ -140,6 +144,7 @@ fn observe<'a>(
         max_ticks: config.max_ticks,
         kill_points: config.kill_points,
         survival_points: config.survival_points,
+        zone_schedule: ZONE_SCHEDULE,
         map,
         geometry: &GEOMETRY,
         params: &config.params,
@@ -154,6 +159,7 @@ fn observe<'a>(
         projectiles: &past.projectiles,
         laser_trails: &past.laser_trails,
         pickups: &past.pickups,
+        safe_zone: past.safe_zone,
     }
 }
 
@@ -170,8 +176,10 @@ fn score_step(
     outcome: RoundOutcome,
 ) {
     for event in eliminations {
-        if event.tank != event.owner {
-            scores[event.owner].kill_points += u64::from(config.kill_points);
+        if let Some(owner) = event.owner
+            && event.tank != owner
+        {
+            scores[owner].kill_points += u64::from(config.kill_points);
         }
     }
     if let RoundOutcome::Winner(seat) = outcome {
@@ -193,6 +201,7 @@ pub struct Replay {
     pub seed: String,
     pub ticks_per_second: u32,
     pub observation_delay_ticks: u64,
+    pub zone_schedule: ZoneSchedule,
     pub config: MatchConfig,
     pub geometry: Geometry,
     pub map: Map,
@@ -251,6 +260,7 @@ pub fn run(config: MatchConfig, controllers: &mut [Box<dyn Controller>]) -> Resu
         seed: config.seed.to_string(),
         ticks_per_second: TICKS_PER_SECOND,
         observation_delay_ticks: DELAY_TICKS,
+        zone_schedule: ZONE_SCHEDULE,
         config,
         geometry: GEOMETRY,
         map,

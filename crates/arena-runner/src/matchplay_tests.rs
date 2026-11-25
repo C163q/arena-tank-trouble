@@ -57,12 +57,23 @@ fn kills_and_final_survival_are_scored_separately() {
         &mut scores,
         &config,
         &[
-            Elimination { tank: 1, owner: 1 },
-            Elimination { tank: 0, owner: 3 },
+            Elimination {
+                tank: 1,
+                owner: Some(1),
+            },
+            Elimination {
+                tank: 0,
+                owner: Some(3),
+            },
+            Elimination {
+                tank: 2,
+                owner: None,
+            },
         ],
         RoundOutcome::Running,
     );
     assert_eq!(scores[1], Score::default());
+    assert_eq!(scores[2], Score::default());
     assert_eq!(
         scores[3],
         Score {
@@ -73,7 +84,10 @@ fn kills_and_final_survival_are_scored_separately() {
     score_step(
         &mut scores,
         &config,
-        &[Elimination { tank: 3, owner: 0 }],
+        &[Elimination {
+            tank: 3,
+            owner: Some(0),
+        }],
         RoundOutcome::Draw,
     );
     assert_eq!(scores[0].kill_points, 2);
@@ -89,13 +103,58 @@ fn kills_and_final_survival_are_scored_separately() {
 }
 
 #[test]
+fn the_zone_ends_an_idle_match_and_matches_the_delayed_observation() {
+    use arena_core::ZONE_SCHEDULE;
+
+    struct Idle;
+
+    impl Controller for Idle {
+        fn name(&self) -> &str {
+            "idle"
+        }
+
+        fn decide(&mut self, observation: &Observation<'_>) -> Decision {
+            assert_eq!(observation.zone_schedule, ZONE_SCHEDULE);
+            if observation.world_tick < ZONE_SCHEDULE.start_tick {
+                assert_eq!(observation.safe_zone, None);
+            } else {
+                let zone = observation.safe_zone.unwrap();
+                let duration = ZONE_SCHEDULE.end_tick - ZONE_SCHEDULE.start_tick;
+                let elapsed = observation.world_tick - ZONE_SCHEDULE.start_tick;
+                let expected_x =
+                    f64::from(observation.map.width) * elapsed as f64 / (2.0 * duration as f64);
+                assert!((zone.min.x - expected_x).abs() < 1e-9);
+            }
+            Decision::ok(Action::default())
+        }
+    }
+
+    let config = MatchConfig::default();
+    assert_eq!(config.max_ticks, ZONE_SCHEDULE.end_tick);
+    let replay = run(config, &mut [Box::new(Idle), Box::new(Idle)]).unwrap();
+    assert!(!matches!(replay.result, ResultKind::TimeLimit));
+    assert!(replay.frames.last().unwrap().tick > ZONE_SCHEDULE.start_tick + DELAY_TICKS);
+    let deaths: Vec<_> = replay
+        .frames
+        .iter()
+        .flat_map(|frame| &frame.eliminations)
+        .collect();
+    assert!(!deaths.is_empty());
+    assert!(deaths.iter().all(|event| event.owner.is_none()));
+    assert!(replay.scores.iter().all(|score| score.kill_points == 0));
+}
+
+#[test]
 fn default_points_reward_last_survivor_twice_as_much_as_a_kill() {
     let config = MatchConfig::default();
     let mut scores = [Score::default(); 2];
     score_step(
         &mut scores,
         &config,
-        &[Elimination { tank: 1, owner: 0 }],
+        &[Elimination {
+            tank: 1,
+            owner: Some(0),
+        }],
         RoundOutcome::Winner(0),
     );
     assert_eq!(

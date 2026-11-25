@@ -3,6 +3,8 @@ const palette = {
   wall: "#3c454a",
   laser: "#087e87",
   shotgun: "#b76b18",
+  danger: "#a43b3b57",
+  zoneBoundary: "#ab4444",
 };
 
 const tankColors = [
@@ -52,6 +54,25 @@ function tank(ctx, { pose, next_shot }, colors, geometry) {
   ctx.restore();
 }
 
+function drawSafeZone(ctx, { safe_zone, width, height }) {
+  if (!safe_zone) return;
+  const { min, max } = safe_zone;
+  if (min.x === 0 && min.y === 0 && max.x === width && max.y === height) return;
+
+  const safeWidth = max.x - min.x;
+  const safeHeight = max.y - min.y;
+  ctx.fillStyle = palette.danger;
+  ctx.beginPath();
+  ctx.rect(0, 0, width, height);
+  ctx.rect(min.x, min.y, safeWidth, safeHeight);
+  ctx.fill("evenodd");
+  if (safeWidth > 0 && safeHeight > 0) {
+    ctx.strokeStyle = palette.zoneBoundary;
+    ctx.lineWidth = 0.04;
+    ctx.strokeRect(min.x, min.y, safeWidth, safeHeight);
+  }
+}
+
 export function render(canvas, state) {
   const ratio = window.devicePixelRatio || 1;
   const width = Math.round(canvas.clientWidth * ratio);
@@ -79,6 +100,8 @@ export function render(canvas, state) {
   ctx.fillRect(0, 0, width, height);
   ctx.setTransform(scale, 0, 0, scale,
     (width - state.width * scale) / 2, (height - state.height * scale) / 2);
+
+  drawSafeZone(ctx, state);
 
   const thickness = state.geometry.wall_thickness;
   const half = thickness / 2;

@@ -10,7 +10,13 @@ cargo run --locked -p arena-runner -- --seed 407 --out .tmp/my-match demo demo d
 
 输出目录必须尚未存在。比赛结束后会一同生成 `replay.html`、`replay.json` 和 `timeline.jsonl`。直接在浏览器打开 HTML 即可离线播放，支持暂停、倍速和进度跳转。1 倍速每秒推进 60 个真实游戏帧。JSON 保留规则、地图、每步局面及实际采用的动作、出局事件、积分和最终结果。示例控制器用于跑通流程。
 
-只剩一辆坦克时继续模拟 120 步，撑到结算的坦克获胜。全灭则平局。裁判默认模拟到 3600 步，若已进入胜负等待则完成剩余结算步。仍有多辆坦克时到达步数上限，计时平局。可以用 `--max-ticks` 调整上限。击杀分给原发射席位，自杀零分。存活分只给最终胜者。击杀默认 1 分，最终存活默认 2 分，分别用 `--kill-points` 和 `--survival-points` 调整。
+只剩一辆坦克时继续模拟 120 步，撑到结算的坦克获胜。全灭则平局。裁判默认步数上限为 5400 步（90 秒）。可以用 `--max-ticks` 调整上限，到达上限时若有多辆坦克仍存活，计为时限平局。已进入胜负等待的对局会继续模拟到结算。击杀分给原发射席位，自杀和收缩区淘汰均为零击杀分。存活分只给最终胜者。击杀默认 1 分，最终存活默认 2 分，分别用 `--kill-points` 和 `--survival-points` 调整。
+
+## 矩形安全区
+
+开局 30 秒时安全区覆盖整张地图，之后以地图中心为中心等比线性收缩。经过 `x` 秒时，安全区的长和宽均为地图对应尺寸乘以 `1 − (x − 30) / 60`，第 90 秒缩为一个点。每步按移动、转向后的矩形车身判定，车身贴边仍存活，任何部分越界即淘汰。同一步既越界又被弹丸或激光击中时，按命中结算。2 秒胜负等待期间照常收缩。
+
+试玩和回放以红色显示安全区外的区域。
 
 ## 基准 Bot
 
@@ -28,7 +34,7 @@ cargo build --locked --release -p arena-runner -p arena-baseline-bot
 
 `timeline.jsonl` 是供分析使用的 UTF-8 文本。首行包含地图、种子、规则和 `columns` 列定义。从第二行开始，每个模拟步一条 JSON 记录，最后一行是本场结果和分项积分。坦克与动作按席位顺序排列。第 0 步是初始局面，之后的第 `t` 行描述推进到第 `t` 步后的真实状态，`decisions` 记录推进到这一帧采用的操作。动作用 W/S/A/D/F 表示，F 表示开火，短横线表示空操作。
 
-坐标以格为单位，角度用弧度，速度为格每秒。`owner` 是原发射席位，`eliminations` 记录淘汰坦克和发射者的席位号。动作状态还能辨认超时和其他错误。可按行截取所需模拟步，附上首行的列定义交给 AI 分析。
+坐标以格为单位，角度用弧度，速度为格每秒。`zone_schedule` 记录起止步，`safe_zone` 记录当前帧的安全区边界，开始前为 `null`。在 `replay.json` 中边界为 `{min, max}` 两个坐标，在 `timeline.jsonl` 中为 `[min_x, min_y, max_x, max_y]`。`eliminations` 记录淘汰坦克和发射者的席位号，收缩区淘汰的 `owner` 为 `null`。动作状态还能辨认超时和其他错误。可按行截取所需模拟步，附上首行的列定义交给 AI 分析。
 
 用浏览器打开项目根目录的通用播放器。把 `replay.json` 或 `timeline.jsonl` 从文件管理器拖到页面任意位置，也可点击「选择文件」。播放器从第 0 步开始显示所选对局，并保留原先打开的回放直到新文件通过校验。[通用播放器](../../viewer.html)
 
@@ -59,8 +65,10 @@ cargo run --locked -p arena-runner -- --out .tmp/native-match ./my_bot.so demo
 | `ticks_per_second`、`decision_budget_ms` | 步频 60，本次墙钟预算 |
 | `max_ticks`、`kill_points`、`survival_points` | 模拟步上限和本场两项计分权重 |
 | `map`、`geometry`、`params` | 固定地图及墙体、物体尺寸和规则参数，位置单位为格 |
+| `zone_schedule` | 固定的收缩起止步 `start_tick` 和 `end_tick` |
 | `own_tank` | 当前自身坦克的朝向、位置、弹量、下次补弹步及装填道具 |
 | `other_tanks` | 延迟世界中的其他坦克，附席位号和存活状态 |
+| `safe_zone` | `world_tick` 时的安全区边界 `{min, max}`，开始收缩前为 `null` |
 | `projectiles`、`laser_trails`、`pickups` | 延迟世界中的所有弹丸、激光轨迹和道具。速度为格每秒，激光到期步与 `world_tick` 同一时间轴 |
 
 `world_tick = max(0, tick − 12)`。即使是自己刚发射的弹丸，观测也要在 12 步后才反映。车头角度以弧度表示。坐标向右为正 x、向下为正 y，角度零指向右，正角度顺时针。

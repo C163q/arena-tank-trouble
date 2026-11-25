@@ -17,7 +17,8 @@ let loadId = 0;
 let dragDepth = 0;
 
 function decodeFrame(record) {
-  const { tick, tanks, projectiles, pickups, laser_trails } = record;
+  const { tick, tanks, projectiles, pickups, laser_trails, safe_zone } = record;
+  const [minX, minY, maxX, maxY] = safe_zone ?? [];
   return {
     tick,
     tanks: tanks.map(([x, y, angle, alive, ammo, refill_at, next_shot]) =>
@@ -27,6 +28,7 @@ function decodeFrame(record) {
     pickups: pickups.map(([kind, x, y]) => ({ kind, x, y })),
     laser_trails: laser_trails.map(([owner, x1, y1, x2, y2, expires_at]) =>
       ({ owner, start: { x: x1, y: y1 }, end: { x: x2, y: y2 }, expires_at })),
+    safe_zone: safe_zone == null ? null : { min: { x: minX, y: minY }, max: { x: maxX, y: maxY } },
   };
 }
 
@@ -57,7 +59,13 @@ const positive = (value) => Number.isFinite(value) && value > 0;
 const nonnegative = (value) => Number.isSafeInteger(value) && value >= 0;
 const point = (p) => p && Number.isFinite(p.x) && Number.isFinite(p.y);
 
-function validFrame(frame, tick, seats) {
+function validZone(zone, { width, height }) {
+  return zone == null || (point(zone.min) && point(zone.max)
+    && zone.min.x >= 0 && zone.min.y >= 0 && zone.max.x <= width && zone.max.y <= height
+    && zone.min.x <= zone.max.x && zone.min.y <= zone.max.y);
+}
+
+function validFrame(frame, tick, seats, map) {
   return frame?.tick === tick && Array.isArray(frame.tanks) && frame.tanks.length === seats
     && frame.tanks.every((tank) => point(tank?.pose?.position) && Number.isFinite(tank.pose.angle)
       && typeof tank.alive === "boolean"
@@ -67,7 +75,8 @@ function validFrame(frame, tick, seats) {
     && Array.isArray(frame.pickups)
     && frame.pickups.every((pickup) => point(pickup) && ["laser", "shotgun"].includes(pickup.kind))
     && Array.isArray(frame.laser_trails)
-    && frame.laser_trails.every((trail) => point(trail?.start) && point(trail.end));
+    && frame.laser_trails.every((trail) => point(trail?.start) && point(trail.end))
+    && validZone(frame.safe_zone, map);
 }
 
 function validate(data) {
@@ -87,7 +96,7 @@ function validate(data) {
       || !["winner", "time_limit", "all_eliminated"].includes(result?.reason)
       || (result.reason === "winner" && !(nonnegative(result.seat) && result.seat < seats.length))
       || !Array.isArray(frames) || frames.length === 0
-      || !frames.every((frame, tick) => validFrame(frame, tick, seats.length))) {
+      || !frames.every((frame, tick) => validFrame(frame, tick, seats.length, map))) {
     throw new Error("回放数据不完整或已损坏");
   }
 }
@@ -130,11 +139,11 @@ function show() {
   time.textContent = (tick / replay.ticks_per_second).toFixed(1) + " / "
     + (last / replay.ticks_per_second).toFixed(1) + " 秒";
   // A different match can have the same tick and canvas size.
-  const { tanks, projectiles, pickups, laser_trails } = replay.frames[tick];
+  const { tanks, projectiles, pickups, laser_trails, safe_zone } = replay.frames[tick];
   const { width, height, walls } = replay.map;
   render(canvas, {
     round: replay, tick, width, height, walls, geometry: replay.geometry,
-    tanks, projectiles, pickups, laser_trails,
+    tanks, projectiles, pickups, laser_trails, safe_zone,
   });
 }
 
