@@ -38,7 +38,10 @@ fn exports_abi_and_waits_on_invalid_json() {
 fn fires_at_a_visible_enemy_with_a_loaded_pickup_and_an_empty_magazine() {
     let mut world = observation();
     world["own_tank"]["ammo"] = json!(0);
+    world["own_tank"]["laser_loaded"] = json!(true);
     world["own_tank"]["next_shot"] = json!("laser");
+    world["map"]["width"] = json!(7);
+    world["other_tanks"][0]["pose"]["position"]["x"] = json!(6.5);
     assert_eq!(decide(&world), 16);
     world["seat"] = json!(3);
     world["other_tanks"][0]["seat"] = json!(2);
@@ -72,7 +75,27 @@ fn moves_out_of_a_delayed_shell_path_even_without_a_live_target() {
     world["projectiles"] = json!([{
         "position": {"x": 1.5, "y": 0.5},
         "velocity": {"x": 0.0, "y": 2.5},
-        "kind": "shell", "owner": 0, "wall_contacts": 0
+        "kind": "shell", "owner": 1, "wall_contacts": 0
+    }]);
+    assert_eq!(decide(&world), 1);
+    world["projectiles"][0]["owner"] = json!(0);
+    assert_eq!(decide(&world), 0);
+    world["projectiles"][0]["wall_contacts"] = json!(1);
+    assert_eq!(decide(&world), 1);
+}
+
+#[test]
+fn dodges_before_stopping_at_a_corridor_wall() {
+    let mut world = observation();
+    world["other_tanks"][0]["alive"] = json!(false);
+    world["map"]["walls"] = json!([
+        {"a": {"x": 1.0, "y": 0.0}, "b": {"x": 1.0, "y": 4.0}},
+        {"a": {"x": 2.0, "y": 0.0}, "b": {"x": 2.0, "y": 4.0}}
+    ]);
+    world["projectiles"] = json!([{
+        "position": {"x": 1.35, "y": 0.35},
+        "velocity": {"x": 0.0, "y": 2.5},
+        "kind": "shell", "owner": 1, "wall_contacts": 0
     }]);
     assert_eq!(decide(&world), 1);
 }

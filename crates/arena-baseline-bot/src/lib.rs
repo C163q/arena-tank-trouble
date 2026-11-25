@@ -13,6 +13,7 @@ use serde::Deserialize;
 struct Observation {
     tick: u64,
     world_tick: u64,
+    seat: usize,
     ticks_per_second: u32,
     params: Params,
     map: Maze,
