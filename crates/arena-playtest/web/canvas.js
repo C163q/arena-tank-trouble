@@ -1,6 +1,7 @@
 const palette = {
   ground: "#f1f2ee",
   wall: "#3c454a",
+  laser: "#087e87",
   player: { main: "#b65430", light: "#e8a37d", dark: "#68341f" },
   target: { main: "#51768b", light: "#acc2cd", dark: "#314c5b" },
 };
@@ -9,7 +10,7 @@ let latestCanvas;
 let latestRound;
 let latestTick;
 
-function tank(ctx, pose, colors, geometry) {
+function tank(ctx, { pose, laser_loaded }, colors, geometry) {
   const { tank_length: length, tank_width: width, muzzle_distance: muzzle } = geometry;
   const trackWidth = width * 0.25;
   ctx.save();
@@ -18,9 +19,17 @@ function tank(ctx, pose, colors, geometry) {
 
   ctx.fillStyle = colors.dark;
   ctx.fillRect(-length / 2, -width / 2, length, width);
-  ctx.beginPath();
-  ctx.roundRect(0, -width * 0.12, muzzle, width * 0.24, width * 0.05);
-  ctx.fill();
+  if (laser_loaded) {
+    const gap = width * 0.15;
+    const rail = width * 0.085;
+    ctx.fillStyle = palette.laser;
+    ctx.fillRect(0, gap, muzzle, rail);
+    ctx.fillRect(0, -gap - rail, muzzle, rail);
+  } else {
+    ctx.beginPath();
+    ctx.roundRect(0, -width * 0.12, muzzle, width * 0.24, width * 0.05);
+    ctx.fill();
+  }
 
   ctx.fillStyle = colors.main;
   ctx.fillRect(-length / 2, -width / 2 + trackWidth, length, width - 2 * trackWidth);
@@ -69,12 +78,32 @@ export function render(canvas, state) {
   }
   ctx.fill();
 
-  tank(ctx, state.tanks[0].pose, palette.player, state.geometry);
-  tank(ctx, state.tanks[1].pose, palette.target, state.geometry);
-  ctx.fillStyle = palette.wall;
-  for (const { position: { x, y } } of state.projectiles) {
+  const pickupSize = state.geometry.laser_pickup_size;
+  for (const { x, y } of state.pickups) {
+    ctx.fillStyle = palette.laser;
+    ctx.fillRect(x - pickupSize / 2, y - pickupSize / 2, pickupSize, pickupSize);
+    ctx.fillStyle = palette.ground;
+    ctx.fillRect(x - pickupSize / 4, y - pickupSize / 16, pickupSize / 2, pickupSize / 8);
+  }
+
+  const radius = state.geometry.projectile_radius;
+  ctx.strokeStyle = palette.laser;
+  ctx.lineWidth = radius * 2;
+  ctx.lineCap = "round";
+  ctx.beginPath();
+  for (const { start, end } of state.laser_trails) {
+    ctx.moveTo(start.x, start.y);
+    ctx.lineTo(end.x, end.y);
+  }
+  ctx.stroke();
+
+  tank(ctx, state.tanks[0], palette.player, state.geometry);
+  tank(ctx, state.tanks[1], palette.target, state.geometry);
+
+  for (const { kind, position: { x, y } } of state.projectiles) {
+    ctx.fillStyle = kind === "laser" ? palette.laser : palette.wall;
     ctx.beginPath();
-    ctx.arc(x, y, state.geometry.projectile_radius, 0, Math.PI * 2);
+    ctx.arc(x, y, radius, 0, Math.PI * 2);
     ctx.fill();
   }
 }

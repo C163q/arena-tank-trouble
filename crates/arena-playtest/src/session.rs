@@ -1,6 +1,6 @@
 use arena_core::{
-    Action, MUZZLE_DISTANCE, PROJECTILE_RADIUS, Params, Round, RoundOutcome, RoundView,
-    TANK_LENGTH, TANK_WIDTH, WALL_THICKNESS,
+    Action, LASER_PICKUP_SIZE, MUZZLE_DISTANCE, PROJECTILE_RADIUS, Params, Round, RoundOutcome,
+    RoundView, TANK_LENGTH, TANK_WIDTH, WALL_THICKNESS,
 };
 use rand::{RngCore, SeedableRng, rngs::StdRng};
 use serde::Deserialize;
@@ -99,6 +99,7 @@ impl Session {
                 "turn_secs" => "转向时间",
                 "reload_secs" => "补弹间隔",
                 "wall_contacts" => "触墙上限",
+                "laser_trail_secs" => "激光轨迹保留",
                 _ => "参数",
             };
             return error(&format!("{label}超出允许范围"));
@@ -155,12 +156,15 @@ impl Session {
                 "muzzle_distance": MUZZLE_DISTANCE,
                 "projectile_radius": PROJECTILE_RADIUS,
                 "wall_thickness": WALL_THICKNESS,
+                "laser_pickup_size": LASER_PICKUP_SIZE,
             },
             "width": view.maze.width,
             "height": view.maze.height,
             "walls": view.maze.walls,
             "tanks": view.tanks,
             "projectiles": view.projectiles,
+            "pickups": view.pickups,
+            "laser_trails": view.laser_trails,
             "params": view.params,
             "outcome": view.outcome,
             "target_hits": self.target_hits,
@@ -252,6 +256,41 @@ mod tests {
         assert_eq!(same["outcome"], "running");
         let new = game.receive(&restart(1, "new", 1.0)).unwrap();
         assert_eq!(new["target_hits"], 0);
+    }
+
+    #[test]
+    fn restart_validates_and_resets_laser_state() {
+        let mut game = Session::new(1647);
+        let legacy = game.receive(&restart(0, "same", 3.0)).unwrap();
+        assert_eq!(legacy["params"]["laser_trail_secs"], 0.20);
+        for _ in 0..900 {
+            game.game.step([Action::default(); 2]);
+        }
+        assert_eq!(game.state()["pickups"].as_array().unwrap().len(), 2);
+        game.receive(&input(1, true));
+        for _ in 0..72 {
+            game.tick();
+        }
+        game.receive(&input(1, false));
+        assert_eq!(game.state()["tanks"][0]["laser_loaded"], true);
+        game.receive(&fire(1));
+        let before = game.tick();
+        assert!(!before["laser_trails"].as_array().unwrap().is_empty());
+
+        let mut request: Value = serde_json::from_str(&restart(1, "same", 3.0)).unwrap();
+        request["params"]["laser_trail_secs"] = json!(0.04);
+        assert_eq!(game.receive(&request.to_string()).unwrap()["type"], "error");
+        assert_eq!(game.state(), before);
+
+        request["params"]["laser_trail_secs"] = json!(0.50);
+        let after = game.receive(&request.to_string()).unwrap();
+        assert_eq!(after["params"]["laser_trail_secs"], 0.50);
+        assert_eq!(after["seed"], before["seed"]);
+        assert_eq!(after["tick"], 0);
+        assert_eq!(after["pickups"], json!([]));
+        assert_eq!(after["laser_trails"], json!([]));
+        assert_eq!(after["tanks"][0]["laser_loaded"], false);
+        assert_eq!(after["tanks"][1]["laser_loaded"], false);
     }
 
     #[test]
